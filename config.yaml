@@ -1,0 +1,59 @@
+# path to write log files
+log_path:
+debug: False
+PLANT_MODEL: banana
+###############################
+# activate / deactivate workflow steps
+RUNSTEP:
+    draw: True                 # draw the cuts and margin lines
+    crop: True                 # cuts and remove margin
+    ML: True                    # apply ML on folder
+    merge: True                 # merge original image and overlay image
+
+###############################
+# If 'draw' or 'crop' activate
+DRAWCROP:
+    images_path:
+    out_cut_dir:
+    out_draw_dir:
+    extension:                   # file extension for loop
+    x_pieces: 2                  # the number of pieces cut vertically
+    y_pieces: 3                  # the number of pieces cut horizontally
+    top: 80                       # The crop margin top
+    left: 80                      # The crop margin left
+    right: 80                     # The crop margin right
+    bottom: 80                    # The crop margin bottom
+    noise_remove: True          # Use IPSDK unionLinearOpening2dImg function with param 3 pixels to remove small white points
+    # path to CSV file for rename cut image
+    csv_file:
+    numbering: bottom             # the order position [right or bottom] cf enf of file
+    force_rerun: True
+
+###############################
+# If 'ML' activate
+ML:
+    images_path:
+    model_name:                 # The name of model
+    split_ML: false             # The methode to find leaves on scan if true use ML else PCA on RGB
+    calibration_value: 1.0      # The cm calibration for 1px
+    small_object: 100           # The minimum area of class, to remove small noise detect object
+    alpha: 0.5                  # The degree of transparency of overlay color label. Must float 0 <= alpha <= 1
+    leaf_border: 80             # The diameter of the brush (in pixels) used to erode the leaf
+    noise_remove: False          # Use IPSDK unionLinearOpening2dImg function with param 3 pixels to remove small white points
+    force_rerun: True                 # If True, rerun all images, else only not run
+    draw_ML_image: True         # If True, add rectangle overlay corresponding to image use for apply ML
+MERGE:
+    rm_original: False           # remove original and overlay, WARNING rollback is not able
+    extension: jpg               # the merge image format
+
+
+##############################
+# For numbering option:
+# if right image number like:
+# 1  2
+# 3  4
+# 5  6
+# if bottom image number like:
+# 1  4
+# 2  5
+# 3  6

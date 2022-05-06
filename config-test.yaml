@@ -1,0 +1,38 @@
+log_path: /home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/
+debug: True
+PLANT_MODEL: banana
+RUNSTEP:
+    draw: true
+    crop: true
+    ML: true
+    merge: true
+DRAWCROP:
+    images_path: /home/sebastien/Documents/IPSDK/IMAGE/bug_francoise
+    out_cut_dir: /home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images
+    out_draw_dir: /home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/draw_images
+    extension: 'tif'
+    x_pieces: 2
+    y_pieces: 3
+    top: 0
+    left: 80
+    right: 80
+    bottom: 80
+    noise_remove: false
+    csv_file: /home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/Explorer_plan_s52.csv
+    sep: ;
+    numbering: Bottom
+    force_rerun: True
+ML:
+    images_path: /home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images
+    model_name: banana_fail
+    split_ML: false
+    calibration_value: 1.0
+    small_object: 10
+    alpha: 0.8
+    leaf_border: 80
+    noise_remove: false
+    force_rerun: True
+    draw_ML_image: false
+MERGE:
+    rm_original: false
+    extension: jpg

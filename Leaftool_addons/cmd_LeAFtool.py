@@ -1,0 +1,1592 @@
+#!/home/sebastien/Documents/IPSDK/Explorer_3_1_0_3_linux/Miniconda/bin/python3.8
+import PyIPSDK
+import PyIPSDK.IPSDKUI as ui
+import PyIPSDK.IPSDKIPLGlobalMeasure as glbmsr
+import PyIPSDK.IPSDKIPLAdvancedMorphology as advmorpho
+import PyIPSDK.IPSDKIPLBinarization as bin
+import PyIPSDK.IPSDKIPLClassification as classif
+import PyIPSDK.IPSDKIPLShapeAnalysis as shapeanalysis
+import PyIPSDK.IPSDKIPLMorphology as morpho
+import PyIPSDK.IPSDKIPLUtility as util
+import PyIPSDK.IPSDKIPLMachineLearning as ml
+import PyIPSDK.IPSDKIPLLogical as logic
+import PyIPSDK.IPSDKIPLArithmetic as arithm
+import PyIPSDK.IPSDKIPLIntensityTransform as itrans
+
+import xml.etree.ElementTree as xmlet
+import cv2
+
+from pathlib import Path
+import os
+import re
+import numpy as np
+import pandas as pd
+from collections import defaultdict, OrderedDict
+from pprint import pprint as pp
+import logging
+import logging.config
+import sys
+import time
+import yaml
+import colorlog
+import argparse
+
+# sys.tracebacklimit = 1
+# auto add Explorer in PYTHONPATH
+for path in sys.path:
+    if "/bin/Release_linux_x64" in path:
+        explorer_path = Path(path.split('/bin/Release_linux_x64')[0]).joinpath("Explorer/Interface").as_posix()
+        break
+sys.path.insert(0, explorer_path)
+
+import DatabaseFunction as Dfct
+import UsefullFunctions as fct
+import UsefullVariables as vrb
+
+# environment settings:
+pd.set_option('display.max_column', None)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_seq_items', None)
+pd.set_option('display.max_colwidth', 30000)
+pd.set_option('expand_frame_repr', True)
+pd.set_option('display.expand_frame_repr', False)
+pd.set_option('max_colwidth', None)
+pd.set_option('display.precision', 9)
+
+# COLORS
+# import seaborn as sns
+# colors = sns.color_palette("tab10")
+# colors65535 = [(int(r*65535), int(g*65535), int(b*65535)) for r, g, b in colors]
+# color_label = ["blue", "orange", "green", "red", "purple", "brown", "pink", "gray", "gold", "turquoise"]
+# color_label_to_RGB_Uint16 = dict([(i, elm) for i, elm in zip(color_label, colors65535)])
+# print(color_label_to_RGB_Uint16)
+
+color_label_to_RGB_Uint16 = {'blue': (7967, 30583, 46260),
+                             'orange': (65535, 32639, 3598),
+                             'green': (11308, 41120, 11308),
+                             'red': (54998, 10023, 10280),
+                             'purple': (38036, 26471, 48573),
+                             'brown': (35980, 22102, 19275),
+                             'pink': (58339, 30583, 49858),
+                             'gray': (32639, 32639, 32639),
+                             'gold': (48316, 48573, 8738),
+                             'turquoise': (5911, 48830, 53199),
+                             'black': (0, 0, 0),
+                             'white': (65535, 65535, 65535)
+                             }
+
+
+# pp(color_label_to_RGB_Uint16)
+
+
+class Timer(object):
+    def __enter__(self):
+        self.start()
+        # __enter__ must return an instance bound with the "as" keyword
+        return self
+
+        # There are other arguments to __exit__ but we don't care here
+
+    def __exit__(self, *args, **kwargs):
+        self.stop()
+
+    def start(self):
+        if hasattr(self, 'interval'):
+            del self.interval
+        self.start_time = time.time()
+
+    def stop(self):
+        if hasattr(self, 'start_time'):
+            self.interval = time.time() - self.start_time
+            del self.start_time  # Force timer reinit
+
+
+def read_image_UINT16(path_image):
+    extension = Path(path_image).suffix[1:]
+    if extension in ["tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]:
+        imageIP = PyIPSDK.loadTiffImageFile(path_image)
+    elif extension in ["im6", "IM6"]:
+        imageIP = PyIPSDK.loadIm6ImageFile(path_image)
+    elif extension in ["jpg", "JPG", "PNG", "png", "BMP", "bmp"]:
+
+        image_load = cv2.imread(path_image, -1)
+        image = (image_load * 256).astype('uint16')
+        b, g, r = 0, 0, 0
+        if len(image.shape) >= 3:
+            if image.shape[2] >= 3:
+                if image.shape[2] == 3:
+                    b, g, r = cv2.split(image)
+                if image.shape[2] == 4:
+                    b, g, r, a = cv2.split(image)
+                allChannels = [PyIPSDK.fromArray(r), PyIPSDK.fromArray(g), PyIPSDK.fromArray(b)]
+                imageIP = PyIPSDK.createImageRgb(PyIPSDK.eImageBufferType.eIBT_UInt16, image.shape[1], image.shape[0])
+                util.eraseImg(imageIP, 0)
+                for c in range(3):
+                    plan = PyIPSDK.extractPlan(0, c, 0, imageIP)
+                    util.copyImg(allChannels[c], plan)
+            else:
+                imageIP = PyIPSDK.fromArray(image)
+        else:
+            imageIP = PyIPSDK.fromArray(image)
+    imageIP = util.convertImg(imageIP, PyIPSDK.eImageBufferType.eIBT_UInt16)
+    return imageIP
+
+
+def outset_to_df(infoSet):
+    dictResult = {}
+    allMeasures = []
+    for msr in infoSet.getMeasureInfoSet().getMeasureInfoColl():
+        key = msr.key()
+        userName, isFound = fct.findUserName(key)  # Passage du nom de la mesure IPSDK à un nom plus simple
+        if "->" not in userName:
+            allMeasures.append((key, userName))
+    for callName, userName in allMeasures:
+        try:
+            values = list(infoSet.getMeasure(callName).getMeasureResult().getColl(0))[1:]
+            if infoSet.getMeasure(callName).getMsrUnitStr() != "" and infoSet.getMeasure(
+                    callName).getMsrUnitStr() is not None:
+                unit = f" ({infoSet.getMeasure(callName).getMsrUnitStr()})".replace('^2', '²')
+            else:
+                unit = ""
+            dictResult[userName + unit] = values
+        except:
+            print("Error with : " + userName)
+    df = pd.DataFrame.from_dict(dictResult, orient='index')
+    df_t = df.T
+    return df_t
+
+
+class CropAndCutImages:
+    """
+    Object to crop and cut scan images on folder.
+    There are able to draw lines to show the cut result before real cut.
+    When cut use dataframe to rename scan images
+    """
+
+    def __init__(self, scan_folder, extension='jpg', x_pieces=2, y_pieces=2, top=0, left=0, bottom=0, right=0,
+                 noise_remove=False, numbering="right", plant_model=None, force_rerun=False):
+        """Created the objet
+
+        Args:
+            scan_folder (:obj:`str`): Path to scan images
+            extension (:obj:`str`): The scan images extension, must be the same for all scan. allow extension are:[
+            "jpg", "JPG", "PNG", "png", "BMP", "bmp", "tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]
+            x_pieces (:obj:`int`): Number of vertical crop
+            y_pieces (:obj:`int`): Number of horizontal crop
+            top (:obj:`int`): The top marge to remove before cut
+            left (:obj:`int`): The left marge to remove before cut
+            bottom (:obj:`int`): The bottom marge to remove before cut
+            right (:obj:`int`): The right marge to remove before cut
+            noise_remove (:obj:`boolean`): use IPSDK unionLinearOpening2dImg function to remove small objet noise (
+            default value 3)
+            numbering (:obj:`str`): if right (default), the output order crop is left to right, if bottom,
+            the output order is top to bottom then left
+            plant_model (:obj:`str`): The plant model name (rice or banana)
+            force_rerun (:obj:`boolean`): even files existed, rerun draw and/or cut
+        """
+        self.logger = logging.getLogger('CropAndCutImages')
+        # input
+        self.__scan_folder = Path(scan_folder)
+        self.extension = extension
+
+        # params
+        self.params = {"x_pieces": x_pieces,
+                       "y_pieces": y_pieces,
+                       "top": top,
+                       "left": left,
+                       "bottom": bottom,
+                       "right": right
+                       }
+        self.noise_rm = noise_remove
+        self.numbering = numbering.lower()
+        self.plant_model = plant_model
+        self.force_rerun = force_rerun
+        # others
+        self.__list_filenames = []
+        self.__dict_names_pos = {}
+        self.__allow_ext = ["jpg", "JPG", "PNG", "png", "BMP", "bmp", "tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]
+        self.exit_status = False # to now exit status if fail some step
+
+        # call functions
+        self.__check_input()
+        message = ", ".join([f"{key}:{value}" for key, value in self.params.items()])
+        self.logger.info(f"CropImage parameters: {message}")
+
+    def __load_metadata_csv_to_dict(self, csv_file):
+        """ Load csv file into dict use for rename scan
+            The dataframe must contain header for columns
+            The 2 first columns are use as dict key (tuple key with scan name and crop position)
+
+        Args:
+            csv_file (:obj:`str`): Path to csv file
+        """
+        if not Path(csv_file).exists():
+            raise FileNotFoundError(f"CSV file '{csv_file}' doesn't exist !!! exit")
+
+        with open(csv_file, "r") as csv:
+            header = csv.readline()
+        sep_dict = {",": header.count(","),
+                    ";": header.count(";"),
+                    ".": header.count("."),
+                    "\t": header.count("\t")
+                    }
+
+        csv_separator = max(sep_dict, key=sep_dict.get)
+
+        df = pd.read_csv(csv_file, index_col=[0, 1], header=0, sep=csv_separator)
+        self.__dict_names_pos = df.to_dict('index')
+        self.__list_filenames = [str(key1) for (key1, key2) in self.__dict_names_pos.keys()]
+
+    def __check_input(self):
+        """ check inputs values"""
+        try:
+            if not self.__scan_folder.exists():
+                raise NotADirectoryError(f"folder '{self.__scan_folder}' doesn't exist !!! exit")
+            for key, value in self.params.items():
+                if not 0 <= value < 100000:
+                    raise ValueError(f"'{key}': '{value}' is not a valid value. 0 < {key} < 100000!!! exit")
+                if not isinstance(value, int):
+                    self.logger.warning(f"'{key}': '{value}' is not a valid int. {int(value)} will be use instead")
+                    self.params[key] = int(value)
+            if "." in self.extension:
+                self.extension = self.extension[1:]
+            if self.extension not in self.__allow_ext:
+                raise NotImplementedError(
+                    f"'extension': '{self.extension}' is not allow use only {self.__allow_ext} value!!! exit")
+            if self.numbering not in ["right", "bottom"]:
+                raise ValueError(
+                    f"'numbering' value: '{self.numbering}' is not a valid value. Only use 'right' or 'bottom' !!! "
+                    f"exit")
+        except Exception as e:
+            self.logger.error(e)
+
+    @staticmethod
+    def __opencv_to_IPSDK(image):
+        """convert opencv image to IPSDK image"""
+        if len(image.shape) >= 3:
+            if image.shape[2] >= 3:
+                if image.shape[2] == 3:
+                    b, g, r = cv2.split(image)
+                if image.shape[2] == 4:
+                    b, g, r, a = cv2.split(image)
+                allChannels = [PyIPSDK.fromArray(r), PyIPSDK.fromArray(g), PyIPSDK.fromArray(b)]
+                imageIP = PyIPSDK.createImageRgb(PyIPSDK.eImageBufferType.eIBT_UInt16, image.shape[1],
+                                                 image.shape[0])
+                util.eraseImg(imageIP, 0)
+                for c in range(3):
+                    plan = PyIPSDK.extractPlan(0, c, 0, imageIP)
+                    util.copyImg(allChannels[c], plan)
+            else:
+                imageIP = PyIPSDK.fromArray(image)
+        else:
+            imageIP = PyIPSDK.fromArray(image)
+        imageIP = util.convertImg(imageIP, PyIPSDK.eImageBufferType.eIBT_UInt16)
+        return imageIP
+
+    def __check_corresponding(self):
+        """test if all scan file have name on csv file"""
+        # try:
+        not_found_list = []
+        for img_file in self.__scan_folder.glob(f"*.{self.extension}"):
+            basename = img_file.stem
+            if basename not in self.__list_filenames:
+                not_found_list.append(img_file.name)
+        if not_found_list :
+            self.exit_status = False
+            txt_list = '\n - '.join([""]+not_found_list)
+            raise NameError(f"Not found corresponding name for scan:{txt_list}")
+        self.exit_status = True
+        # except NameError as e:
+        #     print(e)
+        #     self.logger.error(e)
+
+
+    def loop_crop(self, cutdir_name, csv_file):
+        """Run crop on images files
+
+        Args:
+            cutdir_name (:obj:`str`): the output directory to store crop images
+            csv_file (:obj:`str`): The file use to rename images
+        """
+        def __return_banana_name():
+            project = str(self.__dict_names_pos[(basename, position)]['projet']).replace('/', '-').replace(' ', '')
+            banana = str(self.__dict_names_pos[(basename, position)]['banana']).replace('_', '-').replace(' ', '')
+            strain = str(self.__dict_names_pos[(basename, position)]['strain']).replace('_', '-').replace(' ', '')
+            repetition = str(self.__dict_names_pos[(basename, position)]['repetition']).replace('_', '-').replace(' ', '')
+            dpi = str(self.__dict_names_pos[(basename, position)]['dpi']).replace('_', '-').replace(' ', '')
+            file_name = f"{cut_dir_path}/{project}_b{banana}_s{strain}_r{repetition}_d{dpi}.tif"
+            return file_name
+
+        def __return_rice_name():
+            date = self.__dict_names_pos[(basename, position)]['date'].replace('/', '-').replace(' ', '')
+            DD, MM, YY = date.split("-")
+            date = f"{YY}-{MM}-{DD}"
+            rice = self.__dict_names_pos[(basename, position)]['rice'].replace('_', '-').replace(' ', '')
+            strain = self.__dict_names_pos[(basename, position)]['strain'].replace('_', '-').replace(' ', '')
+            file_name = f"{cut_dir_path}/{date}_{basename[8:-3]}_{rice}_{strain}.tif"
+            return file_name
+
+        def save_image():
+            if self.plant_model == "banana":
+                file_name = __return_banana_name()
+            elif self.plant_model == "rice":
+                file_name = __return_rice_name()
+            if not Path(file_name).exists():
+                x, y, w, h = box
+                im_crop = im_borderless[y: h, x: w].copy()
+                img = (im_crop * 256).astype('uint16')
+                imageIP = self.__opencv_to_IPSDK(img)
+                if self.noise_rm:
+                    # image noise removal
+                    imageIP = morpho.unionLinearOpening2dImg(imageIP, 3.0, PyIPSDK.eBEP_Disable)
+                PyIPSDK.saveTiffImageFile(file_name, imageIP)
+                self.logger.info(f" - {file_name}")
+            else:
+                self.logger.warning(f" - {file_name} already cut")
+
+        self.logger.info("~~~~~~~~~ START STEP CUT ~~~~~~~~~")
+
+        self.logger.info(f"LOAD CSV FILE: {csv_file}")
+        self.__load_metadata_csv_to_dict(csv_file)
+        self.__check_corresponding()
+        cut_dir_path = self.__scan_folder.joinpath(cutdir_name)
+        cut_dir_path.mkdir(exist_ok=True)
+        nb_files = len(list(self.__scan_folder.glob(f"*.{self.extension}")))
+        if nb_files == 0:
+            raise FileNotFoundError(
+                f"Not found file extension '.{self.extension}' on folder: {self.__scan_folder.as_posix()}")
+        if self.exit_status:
+            for scan_num, img_file in enumerate(self.__scan_folder.glob(f"*.{self.extension}"), 1):
+                self.logger.info(f"CROP IMAGE FILE {scan_num}/{nb_files}:\t{img_file.name} to ")
+                basename = img_file.stem
+                image = cv2.imread(img_file.as_posix())
+                im_borderless = image[self.params["top"]:image.shape[0] - self.params["bottom"],
+                                self.params["left"]:image.shape[1] - self.params["right"]]
+                img_width, img_height = im_borderless.shape[1], im_borderless.shape[0]
+                height = img_height // self.params["y_pieces"]
+                width = img_width // self.params["x_pieces"]
+                position = 1
+
+                if self.numbering == "right":
+                    for i in range(0, self.params["y_pieces"]):
+                        for j in range(0, self.params["x_pieces"]):
+                            box = (j * width, i * height, (j + 1) * width, (i + 1) * height)
+                            save_image()
+                            position += 1
+                elif self.numbering == "bottom":
+                    for i in range(0, self.params["x_pieces"]):
+                        for j in range(0, self.params["y_pieces"]):
+                            box = (i * width, j * height, (i + 1) * width, (j + 1) * height)
+                            save_image()
+                            position += 1
+        self.logger.info("~~~~~~~~~ END STEP CUT ~~~~~~~~~")
+
+    def loop_draw(self, draw_dir_name):
+        """draw lines before crop
+
+        Args:
+            draw_dir_name (:obj:`str`): the output directory to store draw images
+        """
+        self.logger.info("~~~~~~~~~ START STEP DRAW ~~~~~~~~~")
+        draw_dir_path = self.__scan_folder.joinpath(draw_dir_name)
+        draw_dir_path.mkdir(exist_ok=True)
+        self.logger.info(f"OUTPUT DRAW directory is: {draw_dir_path}")
+
+        for img_file in self.__scan_folder.glob(f"*.{self.extension}"):
+            outname = f"{draw_dir_path}/{img_file.stem}_draw.tif"
+            self.logger.info(f"DRAW IMAGE FILE: {img_file.name} to {Path(outname).name}")
+
+            if not Path(outname).exists() or self.force_rerun:
+                # print(f"\n####### DRAW IMAGE FILE:\n{img_file.name}")
+                im_draw = cv2.imread(img_file.as_posix())
+                p1 = (self.params["left"], self.params["top"])
+                p2 = (im_draw.shape[1] - self.params["right"], im_draw.shape[0] - self.params["bottom"])
+                cv2.rectangle(im_draw, p1, p2, (255, 0, 0), 4)
+
+                im_borderless = im_draw[self.params["top"]:im_draw.shape[0] - self.params["bottom"],
+                                self.params["left"]:im_draw.shape[1] - self.params["right"]]
+                img_width, img_height = im_borderless.shape[1], im_borderless.shape[0]
+                height = img_height // self.params["y_pieces"]
+                width = img_width // self.params["x_pieces"]
+                for i in range(1, self.params["y_pieces"]):
+                    for j in range(1, self.params["x_pieces"]):
+                        cv2.line(im_draw, pt1=((width * j + self.params["left"]), self.params["top"]),
+                                 pt2=((width * j + self.params["left"]), im_draw.shape[0] - self.params["bottom"]),
+                                 color=(0, 255, 0),
+                                 thickness=4)
+                        cv2.line(im_draw, pt1=(self.params["left"], (height * i + self.params["top"])),
+                                 pt2=(im_draw.shape[1] - self.params["right"], (height * i + self.params["top"])),
+                                 color=(0, 255, 0),
+                                 thickness=4)
+                if self.noise_rm:
+                    # image noise removal
+                    im_draw = (im_draw * 256).astype('uint16')
+                    imageIP = self.__opencv_to_IPSDK(im_draw)
+                    imageIP = morpho.unionLinearOpening2dImg(imageIP, 3.0, PyIPSDK.eBEP_Disable)
+                    PyIPSDK.saveTiffImageFile(outname, imageIP)
+                else:
+                    cv2.imwrite(outname, im_draw)
+            else:
+                self.logger.warning(f" - {Path(outname).name} Already draw")
+        self.logger.info("~~~~~~~~~ END STEP DRAW ~~~~~~~~~")
+
+
+class AnalysisImages:
+    """
+    Object to perform ML analysis on images.
+    """
+
+    def __init__(self, scan_folder, model_name, calibration_value=1, small_object=100, border=0, alpha=0.5,
+                 noise_remove=False, split_ML=False, force_rerun=True, draw_ML_image=False, plant_model=None):
+        """
+        Args:
+            scan_folder (:obj:`str`): Path to scan images
+            model_name (:obj:`int`): The IPSDK PixelClassification model name build with Explorer
+            calibration_value (:obj:`float`): The cm calibration for 1px Default: 1
+            small_object (:obj:`int`): The minimum area of class, to remove small noise detect object Default: 100
+            border (:obj:`int`): The diameter of the brush (in pixels) used to erode the leaf Default: 0
+            alpha (:obj:`float`): The degree of transparency of overlay color label. Must float 0 <= alpha <= 1
+            Default: 0.5
+            noise_remove (:obj:`boolean`): Use IPSDK unionLinearOpening2dImg function with param 3 pixels Default: False
+            split_ML (:obj:`boolean`): Use machine learning to split leaves instead of: False
+            force_rerun (:obj:`boolean`): If True, rerun all images, else only not run Default: True
+            draw_ML_image (:obj:`boolean`): If True, add rectangle overlay corresponding to image use for apply ML
+            Default: False
+            plant_model (:obj:`boolean`): The plant model (rice or banana)
+        """
+        self.logger = logging.getLogger('AnalysisImages')
+        self.plant_model = plant_model
+        self.split_ML = split_ML
+        # Load machine learning model
+        self.model_name = model_name
+        self.model_path = None
+        self.calibration_value = calibration_value
+        self.small_object = small_object
+        self.border_leaf = border
+        self.alpha = alpha
+        self.noise_remove = noise_remove
+        self.force_rerun = force_rerun
+        self.basedir = Path(scan_folder)
+
+        self.full_leaves_ipsdk_img = None
+        self.full_files = []
+        self.mask_overlay_files = []
+        self.files_to_run = []
+        self.csv_list = []
+        self.table_leaves = []
+        self.draw_ML_image = draw_ML_image
+
+        # TODO add csv_path_merge to user argument ?
+        self.csv_path_merge = self.basedir.joinpath("global-merge.csv").as_posix()
+        self.__check_inputs()
+        # If model exist load for all images
+        self.model_load = PyIPSDK.readRandomForestModel(self.model_path)
+
+        # get class on machine learning model
+        self.model_to_label_dict = self.__model_to_label_dict()
+        self.__build_already_run_list()
+
+    @staticmethod
+    def __validate_number(key, value, type_value, min_value=None, max_value=None):
+        if not isinstance(value, type_value):
+            raise TypeError(f"'{key}': '{value}' is not a valid {type_value}.")
+        if not (min_value is None) and not (max_value is None):
+            if min_value < max_value:
+                if not min_value <= value <= max_value:
+                    raise ValueError(
+                        f"'{key}': '{value}' is not a valid value. {min_value} <= {key} <= {max_value}!!! exit")
+            elif max_value < min_value:
+                raise ValueError(f"'{key}':  max_value:{max_value} if greater than min_value:{min_value} !!! exit")
+
+    def __check_inputs(self):
+        """to check inputs values"""
+        if Path(vrb.folderPixelClassification).joinpath(f"{self.model_name}/ModelIPSDK.bin").as_posix():
+            self.model_path = Path(vrb.folderPixelClassification).joinpath(
+                f"{self.model_name}/ModelIPSDK.bin").as_posix()
+        elif Path(vrb.folderPixelClassification).joinpath(f"{self.model_name}/ModelIPSDK.xml").as_posix():
+            self.model_path = Path(vrb.folderPixelClassification).joinpath(
+                f"{self.model_name}/ModelIPSDK.xml").as_posix()
+        else:
+            raise FileNotFoundError(
+                f"The model '{self.model_name}' doesn't exist on IPSDK, please check name with explorer!!!!")
+        self.__validate_number(key="calibration_value", value=self.calibration_value, type_value=float, min_value=0,
+                               max_value=1000)
+        self.__validate_number(key="small_object", value=self.small_object, type_value=int, min_value=0,
+                               max_value=100000000)
+        self.__validate_number(key="border_leaf", value=self.border_leaf, type_value=int, min_value=0, max_value=1000)
+        self.__validate_number(key="alpha", value=self.alpha, type_value=float, min_value=0, max_value=1)
+
+    def __model_to_label_dict(self):
+        """retrieve the name of the machine learning model labels"""
+        dict_label = {}
+        mho_path = Path(vrb.folderPixelClassification).joinpath(f"{self.model_name}/Settings.mho").as_posix()
+        file = xmlet.parse(mho_path)
+        self.xmlElement = file.getroot()
+        label_classes_element = Dfct.SubElement(self.xmlElement, "LabelClasses")
+        nb_label = int(Dfct.SubElement(label_classes_element, "NumberLabels").text)
+        for numLabel in range(nb_label):
+            label_element = Dfct.SubElement(label_classes_element, "Label_" + str(numLabel))
+            color_element = Dfct.SubElement(label_element, "Color").text
+            name_element = Dfct.SubElement(label_element, "Name").text
+            try:
+                name_element = Dfct.convertTextFromAscii(name_element).lower()
+            except:
+                pass
+            value_element = Dfct.SubElement(label_element, "Value").text
+            dict_label[name_element] = {"color": [int(elm) for elm in color_element.split(',')],
+                                        "value": int(value_element)}
+        # print(dict_label)
+        found_lesion = False
+        found_leaf = False
+        for key in dict_label.keys():
+            if "leaf" in key:
+                found_leaf = True
+            if "lesion" in key:
+                found_lesion = True
+        if not found_lesion or not found_leaf:
+            raise ValueError(
+                f"ML MODEL CHECKING FAIL : The model '{self.model_name}' must have label 'leaf' and 'lesion', "
+                f"found [{','.join(dict_label.keys())}] (not case sensitive)")
+        return dict_label
+
+    def __build_already_run_list(self):
+        """analyze the inputs and outputs to build the list of images already analyzed"""
+
+        def glob_re(pattern, strings):
+            return filter(re.compile(pattern).match, strings)
+
+        # glob scan file to analysis
+        full_files_filter = glob_re(r'^(.(?!(_mask_overlay)))*.tif$', os.listdir(self.basedir.as_posix()))
+
+        self.full_files = sorted([self.basedir.joinpath(path) for path in full_files_filter if "overlay" not in path])
+        full_files_set = set(sorted(f"{path.stem}" for path in self.full_files))
+
+        # if force_rerun load already file run
+        mask_overlay_files_filter = glob_re(r'.*_mask_overlay\.tif$', os.listdir(self.basedir.as_posix()))
+        self.mask_overlay_files = sorted([self.basedir.joinpath(path) for path in mask_overlay_files_filter])
+        mask_overlay_files_filter_set = set(
+            sorted(f"{path.stem.replace('_mask_overlay', '')}" for path in self.mask_overlay_files))
+
+        self.csv_list = [self.basedir.joinpath(path) for path in
+                         glob_re(r'.*_merge-lesion\.csv$', os.listdir(self.basedir.as_posix()))]
+
+        basename_files_to_run = list(full_files_set - mask_overlay_files_filter_set)
+        if self.force_rerun:
+            self.files_to_run = self.full_files
+        else:
+            self.files_to_run = sorted([file for file in self.full_files if f"{file.stem}" in basename_files_to_run])
+
+    def run_ML(self):
+        """loop to apply ML on all images"""
+        self.logger.info("~~~~~~~~~ START STEP MACHINE LEARNING ~~~~~~~~~")
+        if not self.files_to_run and self.full_files:
+            self.logger.info(f"All files already run")
+        elif not self.files_to_run and not self.full_files:
+            raise FileNotFoundError(f"Not found file extension '.tif' on folder: {self.basedir.as_posix()}")
+        for img_file_path in self.files_to_run:
+            self.logger.info(f"Analyse scan file: {img_file_path.name}")
+            self.analyse_leaves(image_path=img_file_path.as_posix())
+        self.__merge_CSV()
+        self.logger.info("~~~~~~~~~ END STEP MACHINE LEARNING ~~~~~~~~~")
+
+    def __merge_CSV(self, sep="\t", rm_merge=False):
+        """merge all CSV file include on final folder
+
+        Args:
+            sep: CSV output separator
+            rm_merge: if True, remove intermediate csv files Default: False
+        """
+        df = (pd.read_csv(f, sep=sep) for f in self.csv_list)
+        df = pd.concat(df).fillna(0)
+        with open(self.csv_path_merge, "w") as libsizeFile:
+            df.to_csv(libsizeFile, index=False, sep=sep, float_format='%.2f')
+        if rm_merge:
+            for file in self.csv_list:
+                Path(file).unlink(missing_ok=True)
+
+    def analyse_leaves(self, image_path):
+        # extract path/name from image path
+        path_img = Path(image_path)
+        basename = path_img.stem
+
+        # load full image (ie with all leaves)
+        self.full_leaves_ipsdk_img = PyIPSDK.loadTiffImageFile(image_path)
+
+        # if self.full_leaves_ipsdk_img.getBufferType() != PyIPSDK.eIBT_UInt16:
+        #     range_UInt16 = PyIPSDK.createRange(0, 65535)
+        #     convert_UInt16 = util.convertImg(self.full_leaves_ipsdk_img, PyIPSDK.eIBT_UInt16)
+        #     self.full_leaves_ipsdk_img = itrans.normalizeImg(convert_UInt16, range_UInt16)
+        #     PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"2021-08-19_convert_fields_magna.tif").as_posix(),
+        #     self.full_leaves_ipsdk_img)
+
+        x_size = self.full_leaves_ipsdk_img.getGeometry().getSizeX()
+        y_size = self.full_leaves_ipsdk_img.getGeometry().getSizeY()
+        if self.noise_remove:
+            # image noise removal
+            self.full_leaves_ipsdk_img = morpho.unionLinearOpening2dImg(self.full_leaves_ipsdk_img, 3.0,
+                                                                        PyIPSDK.eBEP_Disable)
+
+        # call function to get leaf position on full images
+        self.table_leaves = self.__split_leaves(image_path, self.full_leaves_ipsdk_img)
+        # if leaves on image
+        if self.table_leaves:
+            # created dict to add all pandas dataframe for each leaf
+            dict_frames_separated_leaves = {}
+
+            # build final image with filter overlay
+            geometryRgb2 = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Int32, x_size, y_size)
+            overlayImagefilter = PyIPSDK.createImage(geometryRgb2)
+            util.eraseImg(overlayImagefilter, 0)
+
+            geometryRgb2_label = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Label16, x_size, y_size)
+            overlayImagefilterIPSDK = PyIPSDK.createImage(geometryRgb2_label)
+            util.eraseImg(overlayImagefilterIPSDK, 0)
+
+            # loop for cut image and apply machine learning
+            for leaf in self.table_leaves:
+                self.logger.info(f" - Read and extract lesion on leaf {leaf.leaf_id}/{len(self.table_leaves)}")
+                leaf.analysis(model_load=self.model_load,
+                              model_to_label_dict=self.model_to_label_dict,
+                              small_object=self.small_object,
+                              calibration_value=self.calibration_value)
+                dict_frames_separated_leaves.update(leaf.dico_frames_separated)
+
+                # add leaf mask to full leaves overlay
+                # ui.displayImg(overlayImagefilterIPSDK, pause=True, title="overlayImagefilterIPSDK")
+                # ui.displayImg(leaf.image_ipsdk_blend, pause=True, title="image_ipsdk_blend")
+                # ui.displayImg(leaf.image_label_blend, pause=True, title="image_label_blend")
+                util.putROI2dImg(overlayImagefilter, leaf.image_label_blend, leaf.x_position, leaf.y_position,
+                                 overlayImagefilter)
+                util.putROI2dImg(overlayImagefilterIPSDK, leaf.image_ipsdk_blend, leaf.x_position, leaf.y_position,
+                                 overlayImagefilterIPSDK)
+                # ui.displayImg(overlayImagefilterIPSDK, pause=True)
+                PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_overlay_ipsdk.tif").as_posix(),
+                                          overlayImagefilterIPSDK)
+            # build all csv tables
+            result_separated = pd.concat(dict_frames_separated_leaves.values(),
+                                         keys=dict_frames_separated_leaves.keys(), ignore_index=True)
+
+            self.__build_df_split(basename, result_separated)
+            self.__build_df_merge(basename, result_separated)
+            # call blend to build mask overlay
+            self.__blend_overlay(basename, overlayImagefilter)
+
+    @staticmethod
+    def __bary_sort(list_to_order):
+        x_min, y_min, x_size, y_size, x_bary, y_bary = list_to_order
+        if x_size < 1000:
+            return (x_bary * 3 + y_bary * 5) / 2
+        else:
+            return (x_bary * 6 + y_bary * 3) / (2.5 * x_size)
+
+    def __blend_overlay(self, basename, ov):
+        ov = util.convertImg(ov, PyIPSDK.eIBT_UInt16)
+        # print(self.model_to_label_dict)
+        color_label_to_RGB_Uint16blend = {}
+        for label in self.model_to_label_dict.keys():
+            i = self.model_to_label_dict[label]["value"]
+            colors_label = self.model_to_label_dict[label]["color"]
+            colors_UINT16 = [int(i * 256) for i in colors_label]
+            color_label_to_RGB_Uint16blend[i - 1] = colors_UINT16  # -1 car pas de leaf
+        color_label_to_RGB_Uint16blend[0] = [0, 0, 0]
+        # Count the number of labels
+        nbLabels = glbmsr.statsMsr2d(ov).max
+
+        # Create 3 random LUTs (one per channel)
+        randValues = np.random.rand(3, int(nbLabels + 1)) * 65535
+        for i in color_label_to_RGB_Uint16blend:
+            if i <= nbLabels:
+                for c in range(3):
+                    randValues[c][i] = color_label_to_RGB_Uint16blend[i][c]
+
+        lutR = PyIPSDK.createIntensityLUT(0, 1, randValues[0, :])
+        lutG = PyIPSDK.createIntensityLUT(0, 1, randValues[1, :])
+        lutB = PyIPSDK.createIntensityLUT(0, 1, randValues[2, :])
+        colorLut = [lutR, lutG, lutB]
+
+        # Convert the label image to a color image
+        overlayImage = PyIPSDK.createImage(self.full_leaves_ipsdk_img.getGeometry())
+
+        for c in range(0, 3):
+            plan = PyIPSDK.extractPlan(0, c, 0, overlayImage)
+            itrans.lutTransform2dImg(ov, colorLut[c], plan)
+
+        # Blending
+        blend = arithm.blendImgImg(self.full_leaves_ipsdk_img, overlayImage, 1 - self.alpha)
+        # change alpha blending see https://fr.wikipedia.org/wiki/Alpha_blending
+        # blend = itrans.normalizeImg(blend, PyIPSDK.createRange(0, 65535))
+        blend = util.convertImg(blend, PyIPSDK.eIBT_UInt16)
+
+        mask = bin.lightThresholdImg(ov, 1)
+        binaryGeometry = PyIPSDK.geometryRgb2d(PyIPSDK.eIBT_Binary, self.full_leaves_ipsdk_img.getSizeX(),
+                                               self.full_leaves_ipsdk_img.getSizeY())
+        maskImage = PyIPSDK.createImage(binaryGeometry)
+
+        for c in range(0, 3):
+            plan = PyIPSDK.extractPlan(0, c, 0, maskImage)
+            util.copyImg(mask, plan)
+
+        # ui.displayImg(self.full_leaves_ipsdk_img, pause=True)
+        logic.maskImgImg(blend, self.full_leaves_ipsdk_img, maskImage, blend)
+        # loop to add leaf if draw True
+        if self.draw_ML_image:
+            leaf_color = [int(i * 256) for i in self.model_to_label_dict["leaf"]["color"]]
+            for leaf in self.table_leaves:
+                self.__drawRectangle(image=blend,
+                                     x=leaf.x_position,
+                                     y=leaf.y_position,
+                                     w=leaf.x_size,
+                                     h=leaf.y_size,
+                                     color=leaf_color,
+                                     e=3
+                                     )
+        # Save an image
+        PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_mask_overlay.tif").as_posix(), blend)
+        self.mask_overlay_files.append(self.basedir.joinpath(f"{basename}_mask_overlay.tif"))
+
+    @staticmethod
+    def __drawRectangle(image, x, y, w, h, e, color):
+
+        image.array[0, y - e:y + e, x - e:x + w + e] = color[0]
+        image.array[1, y - e:y + e, x - e:x + w + e] = color[1]
+        image.array[2, y - e:y + e, x - e:x + w + e] = color[2]
+
+        image.array[0, y:y + h, x - e:x + e] = color[0]
+        image.array[1, y:y + h, x - e:x + e] = color[1]
+        image.array[2, y:y + h, x - e:x + e] = color[2]
+
+        image.array[0, y + h - e:y + h + e, x - e:x + w + e] = color[0]
+        image.array[1, y + h - e:y + h + e, x - e:x + w + e] = color[1]
+        image.array[2, y + h - e:y + h + e, x - e:x + w + e] = color[2]
+
+        image.array[0, y:y + h, x + w - e:x + w + e] = color[0]
+        image.array[1, y:y + h, x + w - e:x + w + e] = color[1]
+        image.array[2, y:y + h, x + w - e:x + w + e] = color[2]
+
+    def __append_col_df(self, basename, df):
+        if self.plant_model == "banana":
+            tab = basename.split("_")
+            project, banana, strain, repetition, dpi = tab[0], tab[1], tab[2], tab[3], tab[4]
+            df.insert(0, "Project", project)
+            df.insert(0, "Banana", banana)
+            df.insert(0, "Strain", strain)
+            df.insert(0, "Repetition", repetition)
+            df.insert(0, "dpi", dpi)
+            df.insert(0, "filename", basename)
+            return df
+        elif self.plant_model == "rice":
+            tab = basename.split("_")
+            date, rep, rice, strain = tab[0], tab[1], tab[2], tab[3]
+            df.insert(0, "strain", strain)
+            df.insert(0, "Rice", rice)
+            df.insert(0, "Rep", rep.split("-")[0])
+            df.insert(0, "Manip", rep)
+            df.insert(0, "Date", date)
+            if len(tab) == 5:
+                df.insert(0, "leaf_ID", tab[4])
+            df.insert(0, "filename", basename)
+            return df
+
+    def __build_df_split(self, basename, result_separated=None):
+        # all leaf and all lesions
+        result_separated = self.__append_col_df(basename, result_separated)
+        # save results to csv format
+        csv_path_file = self.basedir.joinpath(f"{basename}_split-info.csv").as_posix()
+        # print(f"CSV SAVE AT {csv_path_file}")
+        result_separated.to_csv(csv_path_file, index=False, sep="\t", float_format='%.2f')
+
+    def __build_df_merge(self, basename, result_separated):
+        # merge all lesion by leaves
+        leaves = result_separated[result_separated['Class'] == 'leaf']['leaf_ID']
+        df_by_leaves = []
+        for leaf_id in leaves:
+            cond1 = result_separated['Class'] == 'leaf'
+            cond2 = result_separated['leaf_ID'] == int(leaf_id)
+            area_leaf_px2 = result_separated[cond1 & cond2]['Number of pixels'].values[0]
+            area_leaf_cm2 = result_separated[cond1 & cond2].filter(regex='Area').values[0][0]
+
+            cond3 = result_separated['Class'] == 'lesion'
+            area_lesion_px2 = result_separated[cond2 & cond3].filter(regex='Number of pixels')
+            area_lesion_cm2 = result_separated[cond2 & cond3].filter(regex='Area')
+
+            nb_lesion = len(area_lesion_px2)
+            area_lesion_sum_px2 = area_lesion_px2.sum().values[0]
+            area_lesion_median_px2 = area_lesion_px2.median().values[0]
+            area_lesion_mean_px2 = area_lesion_px2.mean().values[0]
+            area_lesion_std_px2 = area_lesion_px2.std().values[0]
+            area_lesion_min_px2 = area_lesion_px2.min().values[0]
+            area_lesion_max_px2 = area_lesion_px2.max().values[0]
+            percent_lesion_px2 = (area_lesion_sum_px2 / area_leaf_px2) * 100
+
+            area_lesion_sum_cm2 = area_lesion_cm2.sum().values[0]
+            area_lesion_median_cm2 = area_lesion_cm2.median().values[0]
+            area_lesion_mean_cm2 = area_lesion_cm2.mean().values[0]
+            area_lesion_std_cm2 = area_lesion_cm2.std().values[0]
+            area_lesion_min_cm2 = area_lesion_cm2.min().values[0]
+            area_lesion_max_cm2 = area_lesion_cm2.max().values[0]
+
+            # build dataframe with resume infos
+            dftmp = pd.DataFrame(data=[{"leaf_ID": leaf_id,
+
+                                        "leaf_NbPixels_px2": area_leaf_px2,
+                                        "lesion_NbPixels_px2": area_lesion_sum_px2,
+
+                                        "leaf_Area_cm2": area_leaf_cm2,
+                                        "lesion_Area_cm2": area_lesion_sum_cm2,
+
+                                        "lesion_nb": nb_lesion,
+                                        "lesion_percent": percent_lesion_px2,
+
+                                        "lesion_median-size_px2": area_lesion_median_px2,
+                                        "lesion_mean_size_px2": area_lesion_mean_px2,
+                                        "lesion_SD-size_px2": area_lesion_std_px2,
+                                        "lesion_min-size_px2": area_lesion_min_px2,
+                                        "lesion_max-size_px2": area_lesion_max_px2,
+
+                                        "lesion_median-size_cm2": area_lesion_median_cm2,
+                                        "lesion_mean_size_cm2": area_lesion_mean_cm2,
+                                        "lesion_SD-size_cm2": area_lesion_std_cm2,
+                                        "lesion_min-size_cm2": area_lesion_min_cm2,
+                                        "lesion_max-size_cm2": area_lesion_max_cm2
+                                        }])
+            df_by_leaves.append(dftmp)
+        df = pd.concat(df_by_leaves, axis=0, ignore_index=True)
+        df = self.__append_col_df(basename, df)
+        # save results to csv format
+        csv_path_file = self.basedir.joinpath(f"{basename}_merge-lesion.csv").as_posix()
+        self.csv_list.append(csv_path_file)
+        # print(f"CSV SAVE AT {csv_path_file}")
+        df.to_csv(csv_path_file, index=False, sep="\t", float_format='%.2f')
+
+    def __build_df_merge_old(self, basename, result_separated):
+        # merge all leave all lesion for some info
+        area_leaf = result_separated[result_separated['Class'] == 'leaf'].filter(regex='Number of pixels').sum().values[
+            0]
+        nb_leaves = len(result_separated[result_separated['Class'] == 'leaf'].filter(regex='Number of pixels'))
+        area_lesion = result_separated[result_separated['Class'] == 'lesion'].filter(regex='Number of pixels')
+        nb_lesion = len(area_lesion)
+        area_lesion_sum = area_lesion.sum().values[0]
+        area_lesion_median = area_lesion.median().values[0]
+        area_lesion_mean = area_lesion.mean().values[0]
+        area_lesion_std = area_lesion.std().values[0]
+        percent_lesion = (area_lesion_sum / area_leaf) * 100
+        # print(f"\n{nb_lesion}\t{area_lesion_sum}\t{area_lesion_median}\t{area_leaf}\t{percent_lesion}\t{
+        # area_lesion_std}\n")
+
+        # build dataframe with resume infos
+        df = pd.DataFrame(data=[{"nb_leaves": nb_leaves,
+                                 "leaf_NbPixels": area_leaf,
+                                 "nb_lesion": nb_lesion,
+                                 "lesion_NbPixels": area_lesion_sum,
+                                 "percent_lesion": percent_lesion,
+                                 "median_lesion": area_lesion_median,
+                                 "mean_lesion": area_lesion_mean,
+                                 "SD_lesion": area_lesion_std
+                                 }])
+        df = self.__append_col_df(basename, df)
+        # print(df)
+        # save results to csv format
+        csv_path_file = self.basedir.joinpath(f"{basename}_merge-lesion.csv").as_posix()
+        self.csv_list.append(csv_path_file)
+        # print(f"CSV SAVE AT {csv_path_file}")
+        df.to_csv(csv_path_file, index=False, sep="\t", float_format='%.2f')
+
+    def __split_leaves(self, image_path, loaded_image):
+        # extract path/name from image path
+        path_img = Path(image_path)
+        basename = path_img.stem
+        if self.plant_model == "banana":
+            small_size = 105000
+        elif self.plant_model == "rice":
+            small_size = 37000
+        ##############################################
+        # If machine learning for extract
+        if self.split_ML:
+            all_mask_label = ml.pixelClassificationRFImg(loaded_image, self.model_load)
+            leaf_indice = self.model_to_label_dict["leaf"]["value"]
+            all_mask = bin.thresholdImg(all_mask_label, leaf_indice, leaf_indice)
+        ##############################################
+        # If not machine learning for extract
+        else:
+            # split PCA RGB
+            imagePCA, eigenValues, eigenVectors, matrixRank = classif.pcaReductionImg(loaded_image)
+            if self.plant_model == "banana":
+                img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 0, imagePCA))
+            elif self.plant_model == "rice":
+                img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
+            # ui.displayImg(img1, pause=True)
+
+            # clusterisation and binarisation
+            value5 = bin.otsuThreshold(img1)
+            all_mask = bin.darkThresholdImg(img1, value5)
+
+        # ui.displayImg(all_mask, pause=True)
+        # suppression des artefacts pour obtenir le mask des feuilles
+        if self.plant_model == "banana":
+            all_mask_filter = advmorpho.removeBorder2dImg(all_mask)
+            all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask_filter, small_size)
+        else:
+            all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask, small_size)
+        all_mask_filter_bin = advmorpho.binaryReconstruction2dImg(all_mask, all_mask_filter)
+        all_mask_filter_bin = advmorpho.fillHole2dImg(all_mask_filter_bin)
+        # ui.displayImg(all_mask_filter_bin, pause=True)
+        # trim the edge of the leaf to remove the plastic cover
+        structuringElement = PyIPSDK.circularSEXYInfo(int(self.border_leaf))
+        all_mask_filter_bin = morpho.erode2dImg(all_mask_filter_bin, structuringElement)
+
+        # split to separated labels (creation mask)
+        all_mask_label = advmorpho.connectedComponent2dImg(all_mask_filter_bin,
+                                                           PyIPSDK.eNeighborhood2dType.eN2T_8Connexity)
+        # remove small objects (bad leaves)
+        label_img = advmorpho.removeSmallShape2dImg(all_mask_label, small_size)
+
+        # check if mask is empty after remove small elements
+        nbLabels = glbmsr.statsMsr2d(label_img).max
+        if nbLabels > 0:
+
+            # cut the leaves according to the mask
+            calibration = PyIPSDK.createGeometricCalibration2d(1, 1, 'px')
+            inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxMinXMsr")
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxMinYMsr")
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxSizeXMsr")
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxSizeYMsr")
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxCenterXMsr")
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxCenterYMsr")
+            outMeasureSet1 = shapeanalysis.labelAnalysis2d(loaded_image, label_img, inMeasureInfoSet2d)
+            x_min_array = outMeasureSet1.getMeasure("BoundingBoxMinXMsr").getMeasureResult().getColl(0)[1:]
+            y_min_array = outMeasureSet1.getMeasure("BoundingBoxMinYMsr").getMeasureResult().getColl(0)[1:]
+            x_size_array = outMeasureSet1.getMeasure("BoundingBoxSizeXMsr").getMeasureResult().getColl(0)[1:]
+            y_size_array = outMeasureSet1.getMeasure("BoundingBoxSizeYMsr").getMeasureResult().getColl(0)[1:]
+            x_barycentre = outMeasureSet1.getMeasure("BoundingBoxCenterXMsr").getMeasureResult().getColl(0)[1:]
+            y_barycentre = outMeasureSet1.getMeasure("BoundingBoxCenterYMsr").getMeasureResult().getColl(0)[1:]
+
+            order_list_pos = sorted(
+                [(x_min, y_min, x_size, y_size, x_bary, y_bary) for x_min, y_min, x_size, y_size, x_bary, y_bary in
+                 zip(x_min_array, y_min_array, x_size_array, y_size_array, x_barycentre, y_barycentre)],
+                key=lambda x: self.__bary_sort(x))
+
+            table_leaves = []
+            for c, tuple_values in enumerate(order_list_pos, 1):
+                xmin, ymin, xsize, ysize, xbary, ybary = tuple_values
+                # print(xmin, ymin, xsize, ysize)
+                table_leaves.append(Leaf(basename=basename,
+                                         basedir=self.basedir,
+                                         leaf_id=c,
+                                         x_pos=xmin,
+                                         y_pos=ymin,
+                                         x_size=xsize,
+                                         y_size=ysize,
+                                         full_leaves_ipsdk_img=loaded_image
+                                         )
+                                    )
+            return table_leaves
+        else:
+            self.logger.warning(f" - fail to found leaf for file {basename}")
+            return None
+
+    def merge_images(self, rm_original=False, extension="jpg"):
+        # TODO include force_rerun True False to merge only run
+        self.logger.info("~~~~~~~~~ START STEP MERGE IMAGES ~~~~~~~~~")
+        from PIL import Image
+        merge_dir_path = self.basedir.joinpath("merge_images")
+        merge_dir_path.mkdir(exist_ok=True)
+        if len(self.full_files) == 0 or len(self.mask_overlay_files) == 0:
+            raise FileNotFoundError(
+                f"Not found sames files list:\n\t- {[elm.name for elm in self.full_files]}\n\t- "
+                f"{[elm.name for elm in self.mask_overlay_files]}")
+        for img1, img2 in zip(self.full_files, self.mask_overlay_files):
+            image1 = Image.open(img1)
+            image2 = Image.open(img2)
+            images_comb = Image.new('RGB', (image1.width + image2.width, min(image1.height, image2.height)))
+            images_comb.paste(image1, (0, 0))
+            images_comb.paste(image2, (image1.width, 0))
+            outname = merge_dir_path.joinpath(f"{img1.stem}.{extension}")
+            self.logger.info(f" - MERGE files  {img1.name} and {img2.name} to {Path(outname).name}")
+            images_comb.save(outname)
+            if rm_original:
+                Path(img1).unlink(missing_ok=True)
+                Path(img2).unlink(missing_ok=True)
+        self.logger.info("~~~~~~~~~ END STEP MERGE IMAGES ~~~~~~~~~")
+
+
+class Leaf:
+    def __init__(self, basename, basedir, leaf_id, x_pos, y_pos, x_size, y_size, full_leaves_ipsdk_img):
+        self.logger = logging.getLogger('Leaf')
+        self.basename = basename
+        self.basedir = basedir
+        self.leaf_id = leaf_id
+        self.x_position = int(x_pos)
+        self.y_position = int(y_pos)
+        self.x_size = int(x_size)
+        self.y_size = int(y_size)
+
+        self.full_leaves_ipsdk_img = full_leaves_ipsdk_img
+
+        self.image_label_blend = None
+        self.image_ipsdk_blend = None
+
+        self.dico_frames_separated = {}
+
+    def analysis(self, model_load, model_to_label_dict, small_object, calibration_value, save_cut=False):
+        ipsdk_img = util.getROI2dImg(self.full_leaves_ipsdk_img, self.x_position, self.y_position, self.x_size,
+                                     self.y_size)
+        if save_cut:
+            Path(self.basedir.joinpath("leaf_cut_only")).mkdir(exist_ok=True)
+            outimgname = self.basedir.joinpath("leaf_cut_only", f"{self.basename}_{self.leaf_id}.tif")
+            self.logger.info(f'Save file leaf: {outimgname.as_posix()}')
+            PyIPSDK.saveTiffImageFile(outimgname.as_posix(), ipsdk_img)
+
+        # ui.displayImg(ipsdk_img, pause=True)
+        all_masks, imageProbabilities = ml.pixelClassificationRFWithProbabilitiesImg(ipsdk_img, model_load)
+
+        # create empty overlay image with original size
+        self.image_label_blend = PyIPSDK.createImage(all_masks, PyIPSDK.eImageBufferType.eIBT_UInt16)
+        util.eraseImg(self.image_label_blend, 0)
+
+        # create empty overlay image with original size
+        self.image_ipsdk_blend = PyIPSDK.createImage(all_masks, PyIPSDK.eImageBufferType.eIBT_Label16)
+        util.eraseImg(self.image_ipsdk_blend, 0)
+
+        # loop for label found on ML
+        for label in model_to_label_dict.keys():
+            i = int(model_to_label_dict[label]["value"])
+            if label.lower() not in ["background"]:
+                nbLabels = glbmsr.statsMsr2d(all_masks).max
+                if label.lower() in ["leaf"]:
+                    split_mask = bin.thresholdImg(all_masks, 1, nbLabels)
+                else:
+                    split_mask = bin.thresholdImg(all_masks, i, i)
+                # split mask to individual label
+                split_mask_separated = advmorpho.connectedComponent2dImg(split_mask,
+                                                                         PyIPSDK.eNeighborhood2dType.eN2T_4Connexity)
+                # remove small elements if < x px on connected
+                if label.lower() in ["leaf"]:
+                    # replace with keep big shapes
+                    calibration = PyIPSDK.createGeometricCalibration2d(1, 1, 'px')
+                    inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "NbPixels2dMsr")
+                    output = shapeanalysis.labelAnalysis2d(split_mask_separated, split_mask_separated,
+                                                           inMeasureInfoSet2d)
+                    df = outset_to_df(output)
+                    max_leaf_size = max(df["Number of pixels"]) - 100
+                    split_mask_separated_filter = advmorpho.removeSmallShape2dImg(split_mask_separated, max_leaf_size)
+                else:
+                    split_mask_separated_filter = advmorpho.removeSmallShape2dImg(split_mask_separated, small_object)
+                # ui.displayImg(split_mask, pause=True)
+                split_mask_filter = bin.lightThresholdImg(split_mask_separated_filter, 1)
+
+                split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
+                label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i - 1)
+                self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
+
+                if label.lower() not in ["leaf"]:
+                    split_mask_filter_Label16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_Label16)
+                    # ui.displayImg(split_mask_filter_Label16, pause=True, title=f"{label}split_mask_filter_Label16 ON LOOP")
+                    label_img2 = arithm.multiplyScalarImg(split_mask_filter_Label16, 1)
+                    # ui.displayImg(label_img2, pause=True, title=f"{label} label_img2 ON LOOP")
+                    nbLabels = glbmsr.statsMsr2d(label_img2).max
+                    img_threshold = bin.thresholdImg(label_img2, 1.0, nbLabels+1)
+                    # ui.displayImg(img_threshold, pause=True, title=f"{label} img_threshold ON LOOP {nbLabels}")
+                    img_split_labels = advmorpho.watershedBinarySeparation2dImg(img_threshold, 4, PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                    # ui.displayImg(img_split_labels, pause=True, title=f"{label}img_split_labels ON LOOP")
+                    self.image_ipsdk_blend = arithm.addImgImg(self.image_ipsdk_blend, img_split_labels)
+                    # ui.displayImg(self.image_ipsdk_blend, pause=True, title=f"{label}image_ipsdk_blend ON LOOP")
+
+                # check if mask is empty after remove small elements
+                nbLabels = glbmsr.statsMsr2d(split_mask_filter).max
+                if nbLabels > 0:
+                    # build calibration measure set
+                    calibration = PyIPSDK.createGeometricCalibration2d(1, calibration_value, 'cm')
+                    inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Area2dMsr",
+                                              shapeanalysis.createHolesBasicPolicyMsrParams(False))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "NbPixels2dMsr")
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Perimeter2dMsr",
+                                              shapeanalysis.createHolesBasicPolicyMsrParams(False))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterLengthMsr",
+                                              shapeanalysis.createSkeleton2dDiameterLengthMsrParams(
+                                                  PyIPSDK.eSHP_Ignored))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterMeanCurvatureMsr",
+                                              shapeanalysis.createSkeleton2dDiameterMeanCurvatureMsrParams(
+                                                  PyIPSDK.eSHP_Ignored))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterTortuosityMsr",
+                                              shapeanalysis.createSkeleton2dDiameterTortuosityMsrParams(
+                                                  PyIPSDK.eSHP_Ignored))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dLengthMsr",
+                                              shapeanalysis.createSkeleton2dLengthMsrParams(PyIPSDK.eSHP_Ignored,
+                                                                                            PyIPSDK.eSEC_Leaf))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMaxThicknessMsr",
+                                              shapeanalysis.createSkeleton2dMaxThicknessMsrParams(PyIPSDK.eSHP_Ignored))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanEdgeLengthMsr",
+                                              shapeanalysis.createSkeleton2dMeanEdgeLengthMsrParams(
+                                                  PyIPSDK.eSHP_Ignored, PyIPSDK.eSEC_Leaf))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanThicknessMsr",
+                                              shapeanalysis.createSkeleton2dMeanThicknessMsrParams(
+                                                  PyIPSDK.eSHP_Ignored))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMinThicknessMsr",
+                                              shapeanalysis.createSkeleton2dMinThicknessMsrParams(PyIPSDK.eSHP_Ignored))
+                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dNbVertexMsr",
+                                              shapeanalysis.createSkeleton2dNbVertexMsrParams(PyIPSDK.eSHP_Ignored,
+                                                                                              PyIPSDK.eSVC_Internal))
+
+                    # call to separated object of the class
+                    outMeasureSet1 = shapeanalysis.labelAnalysis2d(split_mask_separated_filter,
+                                                                   split_mask_separated_filter,
+                                                                   inMeasureInfoSet2d)
+
+                    # ui.displayImg(split_mask_separated, pause=True)
+                    # ui.displayImg(split_mask_separated_filter, pause=True)
+                    # convert to panda dataframe
+                    df = outset_to_df(outMeasureSet1)
+                    if "lesion" in label.lower():
+                        label = "lesion"
+                    df.insert(0, "Class", label)
+                    df.insert(0, "leaf_ID", self.leaf_id)
+                    self.dico_frames_separated[f"{label}-{self.leaf_id}"] = df
+        self.image_ipsdk_blend = util.convertImg(self.image_ipsdk_blend, PyIPSDK.eImageBufferType.eIBT_Label16)
+        # ui.displayImg(self.image_ipsdk_blend, pause=True, title="image_label_blend on LEAF")
+
+
+class LeAFtool:
+    def __init__(self, config_file=None, debug=None):
+
+        self.AVAIL_TOOLS = ["draw", "crop", "ML", "merge"]
+        self.__allow_ext = ["jpg", "JPG", "PNG", "png", "BMP", "bmp", "tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]
+        self.crop_obj = None
+        self.analysis = None
+        self.plant_model = None
+        self.__allow_plant_model = ["banana", "rice"]
+
+        with open(config_file, "r") as file_config:
+            self.config = yaml.load(file_config, Loader=yaml.Loader)
+
+        # self.__check_dir(section="log_path")
+        self.log_path = self.get_config_value(section="log_path")
+        if not self.log_path:
+            self.log_path = Path(__file__).parent.as_posix()
+        Path(self.log_path).mkdir(parents=True, exist_ok=True)
+        if "debug" in self.config and not debug:
+            self.debug = self.get_config_value(section="debug")
+        else:
+            self.debug = debug
+
+        self.logger = self.configure_logger('LeAFtool')
+        # for printing in logFile
+        cmd_line = " ".join(sys.argv)
+        self.logger.info(f"{' LeAFtool analysis start ':#^80s}")
+        self.logger.info(f"Command line : {cmd_line}")
+        self.logger.debug("DEBUG MODE")
+        self.logger.info(f"Your Logs folder is : {self.log_path}")
+        self.logger.info(f"Your input file config YAML is : {config_file}")
+        try:
+            self.__check_config_dic()
+        except Exception as e:
+            if self.debug:
+                self.logger.exception(e)
+            else:
+                self.logger.error(e)
+
+    def configure_logger(self, name):
+        basenameLog = Path(self.log_path).joinpath("LeAFtool_log")
+        logging.config.dictConfig({
+            'version': 1,
+            'disable_existing_loggers': False,
+            'formatters': {
+                'standard': {
+                    'format': '%(asctime)s | %(name)-16s | %(funcName)-15s | %(levelname)-8s | %(message)s',
+                    'datefmt': '%Y-%m-%d %H:%M',
+                },
+                'colored': {
+                    '()': 'colorlog.ColoredFormatter',
+                    'format': "%(log_color)s %(asctime)s | %(name)-16s | %(funcName)-15s | %(levelname)-8s | %("
+                              "message)s",
+                    'datefmt': '%Y-%m-%d %H:%M',
+                },
+            },
+            'handlers': {
+                'stdout_handler': {
+                    'level': f'{"DEBUG" if self.debug else "INFO"}',
+                    'class': "logging.StreamHandler",
+                    'formatter': 'colored',
+                    'stream': 'ext://sys.stdout',
+                },
+                'logHandler': {
+                    'level': f'{"DEBUG" if self.debug else "INFO"}',
+                    'filename': f"{basenameLog}.o",
+                    'class': 'logging.FileHandler',
+                    'formatter': 'standard',
+                    'mode': 'w',
+                },
+                'errorLogHandler': {
+                    'level': 'WARNING',
+                    'filename': f"{basenameLog}.e",
+                    'class': 'logging.FileHandler',
+                    'formatter': 'standard',
+                    'mode': 'w',
+                },
+            },
+            'loggers': {
+                "": {
+                    'handlers': ['stdout_handler', 'logHandler', 'errorLogHandler'],
+                    'level': f'{"DEBUG" if self.debug else "INFO"}',
+                    'propagate': True,
+                },
+            }
+        })
+        return logging.getLogger(name)
+
+    def get_config_value(self, section, key=None, subsection=None):
+        if not key and not subsection:
+            return self.config[section]
+        if subsection:
+            return self.config[section][subsection][key]
+        else:
+            return self.config[section][key]
+
+    def set_config_value(self, section, value, key=None, subsection=None):
+        if not key and not subsection:
+            self.config[section] = value
+        elif subsection:
+            self.config[section][subsection][key] = value
+        else:
+            self.config[section][key] = value
+
+    @property
+    def export_use_yaml(self):
+        """Use to print a dump config.yaml with corrected parameters"""
+
+        def represent_dictionary_order(self, dict_data):
+            return self.represent_mapping('tag:yaml.org,2002:map', dict_data.items())
+
+        def setup_yaml():
+            yaml.add_representer(OrderedDict, represent_dictionary_order)
+
+        setup_yaml()
+        return yaml.dump(self.config, default_flow_style=False, sort_keys=False, indent=4)
+
+    def __check_dir(self, section, key=None, mandatory=[], subsection=None, makedir=False):
+        """Check if path is a directory if not empty
+            resolve path on config
+
+        Arguments:
+            section (str): the first level on config.yaml
+            key (str): the second level on config.yaml
+            mandatory (list tuple): a list or tuple with tools want mandatory info
+            subsection (str): the second level on config.yaml (ie 3 level)
+            makedir (boolean): if not exist create directory
+
+        Raises:
+            NotADirectoryError: If config.yaml data `path` does not exist.
+        """
+        path_value = self.get_config_value(section=section, key=key, subsection=subsection)
+        if path_value:
+            path = Path(path_value).resolve().as_posix() + "/"
+            if (not Path(path).exists() or not Path(path).is_dir()) and not makedir:
+                raise NotADirectoryError(
+                    f'CONFIG FILE CHECKING FAIL : in the "{section}"'
+                    f' section, {f"subsection {subsection}" if subsection else ""}, {key} directory "{path}" '
+                    f'{"does not exist" if not Path(path).exists() else "is not a valid directory"}')
+            else:
+                Path(path).mkdir(exist_ok=True)
+                self.set_config_value(section=section, key=key, value=path, subsection=subsection)
+        elif len(mandatory) > 0:
+            raise NotADirectoryError(
+                f'CONFIG FILE CHECKING FAIL : in the "{section}" section, '
+                f'{f"subsection {subsection}" if subsection else ""}, {key} directory "{path_value}" '
+                f'{"does not exist" if not Path(path_value).exists() else "is not a valid directory"} but is '
+                f'mandatory for tool: {" ".join(mandatory)}')
+
+    def __check_file(self, section, key=None, mandatory=[], subsection=None):
+        """Check if path is a file if not empty
+        :return absolute path file"""
+        path_value = self.get_config_value(section=section, key=key, subsection=subsection)
+        path = Path(path_value).resolve().as_posix()
+        if path:
+            if not Path(path).exists() or not Path(path).is_file():
+                raise FileNotFoundError(
+                    f'CONFIG FILE CHECKING FAIL : in the {section} section, '
+                    f'{f"subsection {subsection}" if subsection else ""},{key} file "{path}" '
+                    f'{"does not exist" if not Path(path).exists() else "is not a valid file"}')
+            else:
+                self.set_config_value(section=section, key=key, value=path, subsection=subsection)
+        elif len(mandatory) > 0:
+            raise FileNotFoundError(
+                f'CONFIG FILE CHECKING FAIL : in the "{section}" section, '
+                f'{f"subsection {subsection}" if subsection else ""},{key} file "{path_value}" '
+                f'{"does not exist" if not Path(path_value).exists() else "is not a valid file"} but is mandatory for '
+                f'tool: {" ".join(mandatory)}')
+
+    @staticmethod
+    def __var_2_bool(key, tool, to_convert):
+        """convert to boolean"""
+        if isinstance(type(to_convert), bool):
+            return to_convert
+        elif f"{to_convert}".lower() in ("yes", "true", "t"):
+            return True
+        elif f"{to_convert}".lower() in ("no", "false", "f"):
+            return False
+        else:
+            raise TypeError(
+                f'CONFIG FILE CHECKING FAIL : in the "{key}" section, "{tool}" key: "{to_convert}" is not a valid '
+                f'boolean')
+
+    def __build_tools_activated(self, key, allow, mandatory=False):
+        tools_activate = []
+        for tool, activated in self.config[key].items():
+            if tool in allow:
+                boolean_activated = self.__var_2_bool(key=key, tool=tool, to_convert=activated)
+                if boolean_activated:
+                    tools_activate.append(tool)
+                    self.config[key][tool] = boolean_activated
+            else:
+                raise ValueError(
+                    f'CONFIG FILE CHECKING FAIL : On section "{key}", tool: "{tool}" not allow on LeAFtool, '
+                    f'select from {allow}')
+        if len(tools_activate) == 0 and mandatory:
+            raise ValueError(f"CONFIG FILE CHECKING FAIL : you need to set True for at least one {key} from {allow}")
+        return tools_activate
+
+    def __get_allow_extension(self, section, key):
+        ext = self.get_config_value(section=section, key=key)
+        if "." in ext:
+            ext = ext.replace(".", "")
+            self.set_config_value(section=section, key=key, value=ext)
+        if ext not in self.__allow_ext:
+            raise NotImplementedError(
+                f"'extension': '{ext}' is not allow use only {self.__allow_ext} value for section {section}, key, "
+                f"{key}!!! exit")
+
+    def __check_config_dic(self):
+        """Configuration file checking"""
+        # get model name
+        self.plant_model = self.get_config_value(section="PLANT_MODEL")
+        if not self.plant_model or self.plant_model not in self.__allow_plant_model:
+            raise NameError(
+                f"{self.plant_model} is not a valid model to work on LeAFtool only use {self.__allow_plant_model}")
+        # check tools activation
+        self.tools = self.__build_tools_activated("RUNSTEP", self.AVAIL_TOOLS, True)
+
+        # if Draw or Crop
+        if "draw" in self.tools or "crop" in self.tools:
+            self.__check_dir(section="DRAWCROP", key="images_path")
+            self.__check_dir(section="DRAWCROP", key="out_draw_dir", makedir=True)
+            self.__get_allow_extension(section="DRAWCROP", key="extension")
+            self.crop_obj = CropAndCutImages(scan_folder=self.config["DRAWCROP"]["images_path"],
+                                             extension=self.get_config_value(section="DRAWCROP", key="extension"),
+                                             x_pieces=self.get_config_value(section="DRAWCROP", key="x_pieces"),
+                                             y_pieces=self.get_config_value(section="DRAWCROP", key="y_pieces"),
+                                             top=self.get_config_value(section="DRAWCROP", key="top"),
+                                             left=self.get_config_value(section="DRAWCROP", key="left"),
+                                             bottom=self.get_config_value(section="DRAWCROP", key="bottom"),
+                                             right=self.get_config_value(section="DRAWCROP", key="right"),
+                                             noise_remove=self.__var_2_bool("DRAWCROP", "noise_remove",
+                                                                            to_convert=self.get_config_value(
+                                                                                section="DRAWCROP",
+                                                                                key="noise_remove")),
+                                             numbering=self.get_config_value(section="DRAWCROP", key="numbering"),
+                                             plant_model=self.plant_model,
+            force_rerun = self.__var_2_bool("DRAWCROP", "force_rerun",
+                                             to_convert=self.get_config_value(
+                                                 section="DRAWCROP",
+                                                 key="force_rerun")),
+            )
+            if self.config["RUNSTEP"]["draw"]:
+                self.crop_obj.loop_draw(draw_dir_name=self.get_config_value(section="DRAWCROP", key="out_draw_dir"))
+            if self.config["RUNSTEP"]["crop"]:
+                self.crop_obj.loop_crop(cutdir_name=self.get_config_value(section="DRAWCROP", key="out_cut_dir"),
+                                        csv_file=self.get_config_value(section="DRAWCROP", key="csv_file")
+                                        )
+        self.logger.debug(f"{self.crop_obj.exit_status}")
+        if ("ML" in self.tools or "merge" in self.tools) and (self.crop_obj and self.crop_obj.exit_status):
+            self.__check_dir(section="ML", key="images_path")
+            self.analysis = AnalysisImages(scan_folder=self.get_config_value(section="ML", key="images_path"),
+                                           model_name=self.get_config_value(section="ML", key="model_name"),
+                                           calibration_value=self.get_config_value(section="ML",
+                                                                                   key="calibration_value"),
+                                           small_object=self.get_config_value(section="ML", key="small_object"),
+                                           alpha=self.get_config_value(section="ML", key="alpha"),
+                                           border=self.get_config_value(section="ML", key="leaf_border"),
+                                           noise_remove=self.__var_2_bool("ML", "noise_remove",
+                                                                          to_convert=self.get_config_value(section="ML",
+                                                                                                           key="noise_remove")),
+                                           force_rerun=self.__var_2_bool("ML", "force_rerun",
+                                                                   to_convert=self.get_config_value(section="ML",
+                                                                                                    key="force_rerun")),
+                                           draw_ML_image=self.__var_2_bool("ML", "draw_ML_image",
+                                                                           to_convert=self.get_config_value(
+                                                                               section="ML", key="draw_ML_image")),
+                                           split_ML=self.__var_2_bool("ML", "split_ML",
+                                                                      to_convert=self.get_config_value(section="ML",
+                                                                                                       key="split_ML")),
+                                           plant_model=self.plant_model
+                                           )
+            if self.config["RUNSTEP"]["ML"]:
+                self.analysis.run_ML()
+            if self.config["RUNSTEP"]["merge"]:
+                self.__get_allow_extension(section="MERGE", key="extension")
+                self.analysis.merge_images(rm_original=self.__var_2_bool("MERGE", "rm_original",
+                                                                         to_convert=self.get_config_value(
+                                                                             section="MERGE", key="rm_original")),
+                                           extension=self.get_config_value(section="MERGE", key="extension"))
+
+    def __repr__(self):
+        return f"{self.__class__}({pp(self.__dict__)})"
+
+
+#####################################################
+# CODE RUN
+#####################################################
+version = "0.0.1"
+
+
+def existent_file(path):
+    """
+    'Type' for argparse - checks that file exists and return the absolute path as PosixPath() with pathlib
+
+    Notes:
+        function need modules:
+
+        - pathlib
+        - argparse
+
+
+    Arguments:
+        path (str): a path to existent file
+
+    Returns:
+        :class:`PosixPath`: ``Path(path).resolve()``
+
+    Raises:
+         ArgumentTypeError: If file `path` does not exist.
+         ArgumentTypeError: If `path` is not a valid file.
+
+    Examples:
+        import argparse
+        parser = argparse.ArgumentParser(prog='test.py', description='''This is demo''')
+        parser.add_argument('-f', '--file', metavar="<path/to/file>",type=existent_file, required=True,
+                            dest='path_file', help='path to file')
+
+    """
+    from argparse import ArgumentTypeError
+    from pathlib import Path
+
+    if not Path(path).exists():
+        # Argparse uses the ArgumentTypeError to give a rejection message like:
+        # error: argument input: x does not exist
+        raise ArgumentTypeError(f'ERROR: file "{path}" does not exist')
+    elif not Path(path).is_file():
+        raise ArgumentTypeError(f'ERROR: "{path}" is not a valid file')
+
+    return Path(path).resolve()
+
+
+def welcome_args(version_arg, parser_arg):
+    """
+    use this Decorator to add information to scripts with arguments
+
+    Args:
+        version_arg: the program version
+        parser_arg: the function which return :class:`argparse.ArgumentParser`
+
+    Returns:
+        None:
+
+    Notes:
+        use at main() decorator for script with :class:`argparse.ArgumentParser`
+
+    Examples:
+        @welcome_args(version, build_parser())
+        def main():
+            # some code
+        main()
+        ################################################################################
+        #                             prog_name and version                            #
+        ################################################################################
+        Start time: 16-09-2020 at 14:39:02
+        Commande line run: ./filter_mummer.py -l mummer/GUY0011.pp1.fasta.PH0014.pp1.fasta.mum
+        - Intput Info:
+                - debug: False
+                - plot: False
+                - scaff_min: 1000000
+                - fragments_min: 5000
+                - csv_file: blabla
+        PROGRAMME CODE HERE
+        Stop time: 16-09-2020 at 14:39:02       Run time: 0:00:00.139732
+        ################################################################################
+        #                               End of execution                               #
+        ################################################################################
+
+    """
+    from datetime import datetime
+
+    def welcome(func):
+        def wrapper():
+            start_time = datetime.now()
+            parser = parser_arg
+            version = version_arg
+            parse_args = parser.parse_args()
+            # Welcome message
+            print(
+                f"""{"#" * 80}\n#{Path(parser.prog).stem + " " + version:^78}#\n{"#" * 80}\nStart time: 
+{start_time:%d-%m-%Y at %H:%M:%S}\nCommande line run: {" ".join(sys.argv)}\n""")
+            # resume to user
+            print(" - Intput Info:")
+            for k, v in vars(parse_args).items():
+                print(f"\t - {k}: {v}")
+            print("\n")
+            func()
+            print(
+                f"""\nStop time: {datetime.now():%d-%m-%Y at %H:%M:%S}\tRun time: {datetime.now() - start_time}\n
+{"#" * 80}\n#{'End of execution':^78}#\n{"#" * 80}""")
+
+        return wrapper
+
+    return welcome
+
+
+def build_parser():
+    epilog_tools = """Documentation avail at: \n\n"""
+    description_tools = f"""
+    More information:
+        Script version: {version}
+    """
+    parser_mandatory = argparse.ArgumentParser(add_help=False)
+
+    mandatory = parser_mandatory.add_argument_group('Input mandatory infos for running')
+    mandatory.add_argument('-c', '--config', metavar="path/to/file/", type=existent_file, required=True,
+                           dest='config_file', help='path to config file YAML')
+    parser_other = argparse.ArgumentParser(
+        parents=[parser_mandatory],
+        add_help=False,
+        prog=Path(__file__).name,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=description_tools,
+        epilog=epilog_tools
+    )
+
+    optional = parser_other.add_argument_group('Input infos not mandatory')
+    optional.add_argument('-v', '--version', action='version', version=version,
+                          help=f'Use if you want to know which version of {Path(__file__).name} you are using')
+    optional.add_argument('-h', '--help', action='help', help=f'show this help message and exit')
+    optional.add_argument('-d', '--debug', action='store_true', help='enter verbose/debug mode')
+    return parser_other
+
+
+@welcome_args(version, build_parser())
+def main():
+    prog_args = build_parser().parse_args()
+    #####################################################
+    # EDIT ONLY THIS LINE TO CHANGE CONFIG FILE
+    # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/test-henri/config-henri.yaml"
+    # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/Marie/config-marie.yaml"
+    # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/config.yaml"
+    # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/bug_marie/config.yaml"
+    #####################################################
+    with Timer() as timer:
+        instance = LeAFtool(config_file=prog_args.config_file, debug=prog_args.debug)
+    instance.logger.info(f'Total time in seconds:{timer.interval}', extra={'className': 'LeAFtool'})
+
+
+if __name__ == '__main__':
+    main()
