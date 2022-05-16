@@ -16,7 +16,7 @@ sys.path.insert(0, Path(vrb.folderMacroInterface + "/LeAFtool/").as_posix())
 # Import LeAFtool class
 from Leaftool_addons.DrawCrop import DrawCropParams
 from Leaftool_addons.MachineLearning import MachineLearningParams
-from Leaftool_addons.commonWidget import style, return_default_folder, TableWidget
+from Leaftool_addons.commonWidget import style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool
 from Leaftool_addons.cmd_LeAFtool import *
 
 
@@ -74,6 +74,9 @@ class OutLog:
         else:
             self.edit.append(message.rstrip())
         qt.QApplication.processEvents()
+        # win = qt.QApplication.focusWindow()
+        # print(win.title())
+
         if self.out:
             self.out.write(message)
 
@@ -109,11 +112,8 @@ class ToolsActivation(qt.QGroupBox):
         self.loading = False
 
         # Layout Style
-        self.setTitle("Tools activation")
+        self.setTitle("Globals Parameters")
         self.setStyleSheet(style)
-        # self.setFixedSize(int(920 * vrb.ratio), int(80 * vrb.ratio))
-        # self.setMinimumSize(int(920 * vrb.ratio), int(80 * vrb.ratio))
-        self.setMaximumSize(int(920 * vrb.ratio), int(80 * vrb.ratio))
         self.layout = qt.QGridLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.setLayout(self.layout)
@@ -126,34 +126,68 @@ class ToolsActivation(qt.QGroupBox):
         self.plant_model.addItems(["banana", "rice"])
         self.plant_model.setFixedSize(int(100 * vrb.ratio), int(25 * vrb.ratio))
 
-        self.section_label = qt.QLabel()
-        self.section_label.setText("Use this section to activate tools to run:")
-        self.section_label.setFixedHeight(int(30 * vrb.ratio))
+        self.show_meta_checkbox = qt.QCheckBox()
+        self.show_meta_checkbox.setText("Show Meta Section")
+        self.show_meta_checkbox.setChecked(True)
+        self.show_meta_checkbox.setFixedWidth(int(150 * vrb.ratio))
 
         self.draw_checkbox = qt.QCheckBox()
         self.draw_checkbox.setText("Draw")
-        self.draw_checkbox.setFixedSize(int(100 * vrb.ratio), int(30 * vrb.ratio))
+        self.draw_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
 
         self.crop_checkbox = qt.QCheckBox()
         self.crop_checkbox.setText("Crop")
-        self.crop_checkbox.setFixedSize(int(100 * vrb.ratio), int(30 * vrb.ratio))
+        self.crop_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
 
         self.ml_checkbox = qt.QCheckBox()
         self.ml_checkbox.setText("ML")
-        self.ml_checkbox.setFixedSize(int(100 * vrb.ratio), int(30 * vrb.ratio))
+        self.ml_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
 
         self.merge_checkbox = qt.QCheckBox()
         self.merge_checkbox.setText("Merge")
-        self.merge_checkbox.setFixedSize(int(100 * vrb.ratio), int(30 * vrb.ratio))
+        self.merge_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
+
+        self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
+        not_resize = self.csv_file.sizePolicy()
+        not_resize.setRetainSizeWhenHidden(True)
+        self.csv_file.setSizePolicy(not_resize)
+
+        self.list_selection = TwoListSelection()
+        self.list_selection.setFixedSize(int(700 * vrb.ratio), int(80 * vrb.ratio))
 
         # Position widgets
-        self.layout.addWidget(self.plant_model_label, 0, 0)
-        self.layout.addWidget(self.plant_model, 1, 0)
-        self.layout.addWidget(self.section_label, 0, 1, 1, 4)
-        self.layout.addWidget(self.draw_checkbox, 1, 1)
-        self.layout.addWidget(self.crop_checkbox, 1, 2)
-        self.layout.addWidget(self.ml_checkbox, 1, 3)
-        self.layout.addWidget(self.merge_checkbox, 1, 4)
+        self.layout.addWidget(self.plant_model_label, 0, 0, Qt.AlignLeft)
+        self.layout.addWidget(self.plant_model, 0, 1, Qt.AlignLeft)
+        self.layout.addWidget(self.show_meta_checkbox, 0, 2, Qt.AlignLeft)
+
+        # Layout Style
+        tools_group = qt.QGroupBox()
+        tools_group.setTitle("Tools activation")
+        tools_group.setStyleSheet(style)
+        tools_group.layout = qt.QHBoxLayout()
+        tools_group.layout.setContentsMargins(5, 5, 5, 5)
+        tools_group.setLayout(tools_group.layout)
+        tools_group.layout.addStretch()
+        tools_group.layout.addWidget(self.draw_checkbox)
+        tools_group.layout.addWidget(self.crop_checkbox)
+        tools_group.layout.addWidget(self.ml_checkbox)
+        tools_group.layout.addWidget(self.merge_checkbox)
+        tools_group.layout.addStretch()
+        tools_group.setFixedWidth(int(500 * vrb.ratio))
+        self.layout.addWidget(tools_group, 0, 3, Qt.AlignLeft)
+
+        # Meta group
+        self.meta_group = qt.QGroupBox()
+        self.meta_group.setTitle("Meta Infos")
+        self.meta_group.setStyleSheet(style)
+        self.meta_group.layout = qt.QVBoxLayout()
+        self.meta_group.layout.setContentsMargins(10, 10, 10, 10)
+        self.meta_group.setLayout(self.meta_group.layout)
+        self.meta_group.layout.addStretch()
+        self.meta_group.layout.addWidget(self.csv_file)
+        self.meta_group.layout.addWidget(self.list_selection)
+        self.meta_group.layout.addStretch()
+        self.layout.addWidget(self.meta_group, 1, 0, 1, 4)
 
         # connections
         self.draw_checkbox.stateChanged.connect(self.update_activation_tools)
@@ -161,6 +195,21 @@ class ToolsActivation(qt.QGroupBox):
         self.ml_checkbox.stateChanged.connect(self.update_activation_tools)
         self.merge_checkbox.stateChanged.connect(self.update_activation_tools)
         self.plant_model.currentIndexChanged.connect(self.update_activation_tools)
+        self.csv_file.lineEditFile.editingFinished.connect(self.update_activation_tools)
+        # self.list_selection.mInput.itemSelectionChanged.connect(self.update_activation_tools)
+        # self.list_selection.mOuput.itemSelectionChanged.connect(self.update_activation_tools)
+        self.list_selection.mBtnMoveToAvailable.clicked.connect(self.update_activation_tools)
+        self.list_selection.mBtnMoveToSelected.clicked.connect(self.update_activation_tools)
+        self.list_selection.mButtonToAvailable.clicked.connect(self.update_activation_tools)
+        self.list_selection.mButtonToSelected.clicked.connect(self.update_activation_tools)
+        self.list_selection.mBtnUp.clicked.connect(self.update_activation_tools)
+        self.list_selection.mBtnDown.clicked.connect(self.update_activation_tools)
+
+        self.show_meta_checkbox.stateChanged.connect(self.show_meta_section)
+        self.show_meta_section()
+
+    def show_meta_section(self):
+        self.meta_group.setVisible(self.show_meta_checkbox.isChecked())
 
     def upload_activation_tools(self):
 
@@ -174,10 +223,13 @@ class ToolsActivation(qt.QGroupBox):
         self.crop_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["crop"]))
         self.ml_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["ML"]))
         self.merge_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["merge"]))
+        self.csv_file.lineEditFile.setText(self.parent.dict_for_yaml["csv_file"])
+        self.list_selection.add_right_elements(self.parent.dict_for_yaml["rename"])
         self.loading = False
 
     def update_activation_tools(self):
         if not self.loading:
+
             self.parent.dict_for_yaml["RUNSTEP"]["crop"] = self.crop_checkbox.isChecked()
             self.parent.dict_for_yaml["RUNSTEP"]["draw"] = self.draw_checkbox.isChecked()
             self.parent.layer_draw_crop.show_draw_params()
@@ -185,6 +237,9 @@ class ToolsActivation(qt.QGroupBox):
             self.parent.dict_for_yaml["RUNSTEP"]["merge"] = self.merge_checkbox.isChecked()
             self.parent.layer_ml_merge.show_ml_merge_params()
             self.parent.dict_for_yaml["PLANT_MODEL"] = self.plant_model.currentText()
+            self.parent.dict_for_yaml["csv_file"] = self.csv_file.lineEditFile.text()
+            self.update_header_csv()
+            self.parent.dict_for_yaml["rename"] = self.list_selection.get_right_elements()
             self.parent.preview_config.setText(self.parent.export_use_yaml)
 
             # if all disable, disable run
@@ -197,6 +252,30 @@ class ToolsActivation(qt.QGroupBox):
             else:
                 self.parent.layer_leaftool_params.run.setDisabled(False)
                 self.parent.layer_leaftool_params.save.setDisabled(False)
+                # self.csv_file.setVisible(self.parent.layer_tools.draw_checkbox.isChecked())
+                # self.csv_file.setVisible(self.parent.layer_tools.crop_checkbox.isChecked())
+                # self.csv_file.setVisible(self.parent.layer_tools.ml_checkbox.isChecked())
+
+    def update_header_csv(self):
+        if self.parent.dict_for_yaml["csv_file"]:
+            header_txt = Path(self.parent.dict_for_yaml["csv_file"]).open("r").readline().strip()
+            sep_dict = {",": header_txt.count(","),
+                        ";": header_txt.count(";"),
+                        ".": header_txt.count("."),
+                        "\t": header_txt.count("\t")
+                        }
+            csv_separator = max(sep_dict, key=sep_dict.get)
+            header_list = header_txt.split(csv_separator)
+            left_list = self.list_selection.get_left_elements()
+            right_list = self.list_selection.get_right_elements()
+            # if header_list not equal left_list+right_list
+            if len(header_list) != len(left_list+right_list):
+                if len(left_list) == 0:
+                    self.list_selection.add_left_elements(list(set(header_list) - set(right_list)))
+                else:
+                    self.list_selection.add_left_elements(header_list)
+        else:
+            self.list_selection.clean_list()
 
 
 class LeaftoolParams(qt.QGroupBox):
@@ -207,7 +286,7 @@ class LeaftoolParams(qt.QGroupBox):
         # Layout Style
         self.setTitle("LeAFtool params")
         self.setStyleSheet(style)
-        self.setMaximumSize(int(920 * vrb.ratio), int(100 * vrb.ratio))
+        self.setMaximumSize(int(980 * vrb.ratio), int(70 * vrb.ratio))
         self.layout = qt.QGridLayout()
         self.layout.setContentsMargins(10, 20, 10, 10)
         self.setLayout(self.layout)
@@ -241,14 +320,17 @@ class LeaftoolParams(qt.QGroupBox):
         self.debug_checkbox.setFixedSize(int(120 * vrb.ratio), int(30 * vrb.ratio))
 
         # Position Widgets
-        self.layout.addWidget(self.upload, 0, 0, Qt.AlignCenter)
-        self.layout.addWidget(self.save, 0, 1, Qt.AlignCenter)
-        self.layout.addWidget(self.run, 0, 2, Qt.AlignCenter)
-        self.layout.addWidget(self.preview_yaml_checkbox, 0, 3, Qt.AlignCenter)
-        self.layout.addWidget(self.debug_checkbox, 1, 3, Qt.AlignCenter)
-        self.layout.addWidget(self.upload_label, 1, 0, Qt.AlignCenter)
-        self.layout.addWidget(self.save_label, 1, 1, Qt.AlignCenter)
-        self.layout.addWidget(self.run_label, 1, 2, Qt.AlignCenter)
+        self.layout.addWidget(self.upload_label, 0, 0, Qt.AlignRight)
+        self.layout.addWidget(self.upload, 0, 1, Qt.AlignLeft)
+
+        self.layout.addWidget(self.save_label, 0, 2, Qt.AlignRight)
+        self.layout.addWidget(self.save, 0, 3, Qt.AlignLeft)
+
+        self.layout.addWidget(self.run_label, 0, 4, Qt.AlignRight)
+        self.layout.addWidget(self.run, 0, 5, Qt.AlignLeft)
+
+        self.layout.addWidget(self.preview_yaml_checkbox, 0, 6, Qt.AlignCenter)
+        self.layout.addWidget(self.debug_checkbox, 0, 7, Qt.AlignCenter)
 
         # Init state
         self.hide_preview_yaml()
@@ -301,7 +383,7 @@ class RunLeAFtool(qt.QWidget):
         # Create the text output widget.
         self.process = qt.QTextEdit(self, readOnly=True)
         self.process.setMinimumHeight(50)
-        self.process.setMaximumSize(int(920 * vrb.ratio), 200)
+        self.process.setMaximumSize(int(980 * vrb.ratio), 200)
         sys.stdout = OutLog(self.process, sys.stdout)
         sys.stderr = OutLog(self.process, sys.stderr)
 
@@ -357,12 +439,14 @@ class RunLeAFtool(qt.QWidget):
             self.dict_for_yaml = yaml.load(file_config, Loader=yaml.Loader)
         with open(self.default_yaml_path, "r") as file_config:
             self.dict_backup = yaml.load(file_config, Loader=yaml.Loader)
-        self.mask_yaml()
-        # print(f"{'#'*15}\ndict_yaml\n{'#'*15}\n{self.dict_for_yaml}")
+        # self.mask_yaml()
+        # from pprint import pprint as pp
+        # pp(self.dict_for_yaml)
         # print(f"{'#'*15}\ndict_backup\n{'#'*15}\n{self.dict_backup}")
         self.upload_all()
 
     def update_all(self):
+
         self.layer_tools.update_activation_tools()
         self.layer_draw_crop.update_draw_crop_params()
         self.layer_ml_merge.update_ml_params()
@@ -411,7 +495,7 @@ class RunLeAFtool(qt.QWidget):
 
         def setup_yaml():
             yaml.add_representer(OrderedDict, represent_dictionary_order)
-        self.mask_yaml()
+        # self.mask_yaml()
         setup_yaml()
         return yaml.dump(self.dict_for_yaml, default_flow_style=False, sort_keys=False, indent=4)
 
@@ -466,8 +550,8 @@ class MainInterface(qt.QWidget):
         self.setLayout(self.layout)
         self.setContentsMargins(5, 5, 5, 5)
         # windows size
-        self.setMinimumWidth(int(1050))
-        # self.setMaximumSize(int(1800), int(900))
+        # self.setMinimumWidth(int(1920))
+        self.setMaximumSize(int(1800), int(900))
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
 
@@ -477,28 +561,28 @@ class MainInterface(qt.QWidget):
         self.logo_label = qt.QLabel(self)
         self.logo_img = QtGui.QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
 
-        self.logo_img = self.logo_img.scaledToHeight(80, mode=Qt.FastTransformation)
+        self.logo_img = self.logo_img.scaledToHeight(60, mode=Qt.FastTransformation)
         self.logo_label.setPixmap(self.logo_img)
         self.logo_label.setAlignment(Qt.AlignVCenter)
-        self.logo_label.setMaximumHeight(80)
-        # self.logo_label.setFixedSize(920, 90)
+        self.logo_label.setMaximumHeight(60)
 
         # Initialize tab screen
         self.tabs = qt.QTabWidget()
+        self.tabs.setTabPosition(qt.QTabWidget.West)
         self.tab1 = RunLeAFtool()
         #
-        # if self.tab1.leaftool:
-        #     csv_file = self.tab1.leaftool.analysis.csv_path_merge
-        #     path_images = self.tab1.layer_ml_merge.images_path
-        # path_images = "/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images/"
-        # csv_file = "/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images/global-merge.csv"
-        # df = pd.read_csv(csv_file, index_col=None, header=[0], squeeze=True, sep="\t")
-        # ddict = df.to_dict(orient='list')
-        # self.tab2 = TableWidget(ddict, path_images=path_images)
-        # self.tabs.addTab(self.tab2, "Explore Results")
-        #
+        if self.tab1.leaftool:
+            csv_file = self.tab1.leaftool.analysis.csv_path_merge
+            path_images = self.tab1.layer_ml_merge.images_path
+        path_images = "/home/sebastien/Documents/IPSDK/IMAGE/thomas/crop/"
+        csv_file = "/home/sebastien/Documents/IPSDK/IMAGE/thomas/crop/global-merge.csv"
+        df = pd.read_csv(csv_file, index_col=None, header=[0], sep="\t")
+        ddict = df.to_dict(orient='list')
+        self.tab2 = TableWidget(ddict, path_images=path_images)
+
         # Add tabs
         self.tabs.addTab(self.tab1, "Run LeAFtool")
+        self.tabs.addTab(self.tab2, "Explore Results")
         self.layout.addWidget(self.logo_label, 0, 0, Qt.AlignCenter)
         self.layout.addWidget(self.tabs, 1, 0, Qt.AlignLeft)
 
@@ -530,6 +614,7 @@ class MainInterface(qt.QWidget):
 
 main_interface = MainInterface()
 
+
 def openWidget():
     main_interface.showMaximized()
     fct.showWidget(main_interface)
@@ -557,11 +642,11 @@ if __name__ == '__main__':
 
     sys.excepthook = exception_hook
 
-    # foo = FileSelector("test")
+    # foo = FileSelectorLeaftool("test")
     # foo = DataExplorer()
     # foo = DrawCropParams(parent=RunLeAFtool)
-    # foo = MainInterface()
-    foo = RunLeAFtool()
+    foo = MainInterface()
+    # foo = RunLeAFtool()
     # foo = NumberLineEditLabel(constraint="Natural", text="0", label="Y pieces:")
     foo.showMaximized()
     foo.show()

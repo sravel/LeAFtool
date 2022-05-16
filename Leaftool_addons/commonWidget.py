@@ -2,7 +2,7 @@ import sys, os, traceback
 
 from PyQt5.QtCore import Qt, QCoreApplication, QDir
 import PyQt5.QtWidgets as qt
-from PyQt5 import QtGui
+from PyQt5 import QtGui, QtCore
 from pathlib import Path
 import pandas as pd
 
@@ -16,13 +16,14 @@ import DatabaseFunction as Dfct
 
 from pathlib import Path
 
-style = 'QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(6, 115, 186)} QGroupBox {font: bold; border: 1px solid gray; margin-top: 12 px}'
+style = 'QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(6, 115, ' \
+        '186)} QGroupBox {font: bold; border: 1px solid gray; margin-top: 12 px}'
 allow_ext = ["tif", "tiff", "TIF", "TIFF", "Tif", "Tiff", "im6", "IM6", "jpg", "JPG", "PNG", "png", "BMP", "bmp"]
 
 
 def return_default_folder():
     defaultFolder = Dfct.childText(vrb.userPathElement, "ImportImages")
-    if defaultFolder is None or defaultFolder == "" or os.path.exists(defaultFolder) is False:
+    if defaultFolder is None or defaultFolder == "" or not os.path.exists(defaultFolder):
         defaultFolder = os.path.dirname(vrb.folderExplorer) + "/images"
         if not os.path.exists(defaultFolder):
             defaultFolder = os.path.dirname(vrb.folderExplorer) + "/data/Explorer/images"
@@ -64,7 +65,7 @@ def get_files_ext(path, extensions, add_ext=True):
     return all_files, files_ext
 
 
-class FileSelector(qt.QGroupBox):
+class FileSelectorLeaftool(qt.QGroupBox):
     """add file selector buttom"""
 
     def __init__(self, label, title=None, style="minimal", file=False):
@@ -101,25 +102,32 @@ class FileSelector(qt.QGroupBox):
 
     def openQDialog(self):
         dlg = qt.QFileDialog()
-        dlg.setOption(dlg.DontUseNativeDialog, False)
-        dlg.setOption(dlg.HideNameFilterDetails, False)
-        dlg.setFilter(dlg.filter() | QDir.Hidden)
+        # dlg.setOption(dlg.DontUseNativeDialog, False)
+        # dlg.setOption(dlg.HideNameFilterDetails, False)
+        # dlg.setFilter(dlg.filter() | QDir.Hidden)
         defaultFolder = return_default_folder()
+        print(defaultFolder)
         if self.is_file:
-            filename = dlg.getOpenFileName(dlg, caption="Select your file",
-                                              directory=defaultFolder,
-                                              filter="table file (*.csv *.tsv)")
+            filename = qt.QFileDialog.getOpenFileName(self, caption="Select your file",
+                                           directory=defaultFolder,
+                                           filter="table file (*.csv *.tsv)")
+                                           # options=qt.QFileDialog.DontUseNativeDialog)
+            print(f"filelist: {filename}")
             filename = filename[0]
+            print(f"filename: {filename}")
         else:
             dlg.setOption(dlg.ShowDirsOnly, True)
             dlg.setFileMode(dlg.Directory)
             filename = dlg.getExistingDirectory(dlg, caption="Select your folder",
-                                                   directory=defaultFolder)
+                                                directory=defaultFolder)
+            print(f"FOLDER: {filename}")
 
+        print(f"FILE OR FOLDER: {filename}")
         if filename != "" and filename:
             try:
                 self.lineEditFile.setText(filename)
                 self.lineEditFile.setFocus()
+                print(f"ON TRY: {filename}")
                 Dfct.SubElement(vrb.userPathElement, "ImportImages").text = os.path.dirname(filename)
                 Dfct.saveXmlElement(vrb.userPathElement, vrb.folderInformation + "/UserPath.mho", forceSave=True)
             except:
@@ -218,20 +226,24 @@ class TableWidget(qt.QTableWidget):
     def cellClick(self, cellItem):
 
         rowValue, columnValue = cellItem.row(), cellItem.column()
-        text = self.item(rowValue,0).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
+        text = self.item(rowValue,
+                         7).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a
+        # cliqué
 
         if vrb.mainWindow:
             try:
                 nameImageInput = f"{self.path_images}{text}.tif"
                 imageInput = PyIPSDK.loadTiffImageFile(nameImageInput)
 
-                nameImageOverlay = f"{self.path_images}{text}_mask_overlay.tif"
+                nameImageOverlay = f"{self.path_images}{text}_overlay_ipsdk.tif"
                 imageOverlay = PyIPSDK.loadTiffImageFile(nameImageOverlay)
 
-                vrb.mainWindow.widgetLabelImage.addNewImage("Image",imageInput)
-                vrb.mainWindow.widgetLabelImage.addNewImage("Result",imageOverlay)
+                vrb.mainWindow.widgetLabelImage.addNewImage("Image", imageInput)
+                vrb.mainWindow.widgetLabelImage.addNewImage("Result", imageOverlay)
 
-                for num in range(vrb.mainWindow.widgetLabelImage.layout.count()): # Boucle pour afficher l'image "Image" et l'image "Result" en overlay
+                for num in range(
+                        vrb.mainWindow.widgetLabelImage.layout.count()):  # Boucle pour afficher l'image "Image" et
+                    # l'image "Result" en overlay
                     try:
                         item = vrb.mainWindow.widgetLabelImage.layout.itemAt(num)
                         if item is not None:
@@ -273,3 +285,113 @@ if __name__ == '__main__':
     foo = TableWidget(ddict, path_images="/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images/")
     foo.showMaximized()
     app.exec_()
+
+
+class TwoListSelection(qt.QWidget):
+    def __init__(self, parent=None):
+        super(TwoListSelection, self).__init__(parent)
+        self.setup_layout()
+
+    def setup_layout(self):
+        lay = qt.QGridLayout(self)
+        self.mInput = qt.QListWidget()
+        self.mOuput = qt.QListWidget()
+
+        self.label = qt.QLabel("Rename_order:")
+        self.label.setMinimumWidth(int(83 * vrb.ratio))
+        self.mButtonToSelected = qt.QPushButton(">>")
+        self.mBtnMoveToAvailable = qt.QPushButton(">")
+        self.mBtnMoveToSelected = qt.QPushButton("<")
+        self.mButtonToAvailable = qt.QPushButton("<<")
+
+        vlay = qt.QVBoxLayout()
+        vlay.addStretch()
+        vlay.addWidget(self.mButtonToSelected)
+        vlay.addWidget(self.mBtnMoveToAvailable)
+        vlay.addWidget(self.mBtnMoveToSelected)
+        vlay.addWidget(self.mButtonToAvailable)
+        vlay.addStretch()
+
+        self.mBtnUp = qt.QPushButton("Up")
+        self.mBtnDown = qt.QPushButton("Down")
+
+        vlay2 = qt.QVBoxLayout()
+        vlay2.addStretch()
+        vlay2.addWidget(self.mBtnUp)
+        vlay2.addWidget(self.mBtnDown)
+        vlay2.addStretch()
+
+        lay.addWidget(self.label, 0, 0)
+        lay.addWidget(self.mInput, 0, 1)
+        lay.addLayout(vlay, 0, 2)
+        lay.addWidget(self.mOuput, 0, 3)
+        lay.addLayout(vlay2, 0, 4)
+
+        self.update_buttons_status()
+        self.connections()
+
+    @QtCore.pyqtSlot()
+    def update_buttons_status(self):
+        self.mBtnUp.setDisabled(not bool(self.mOuput.selectedItems()) or self.mOuput.currentRow() == 0)
+        self.mBtnDown.setDisabled(
+            not bool(self.mOuput.selectedItems()) or self.mOuput.currentRow() == (self.mOuput.count() - 1))
+        self.mBtnMoveToAvailable.setDisabled(not bool(self.mInput.selectedItems()) or self.mOuput.currentRow() == 0)
+        self.mBtnMoveToSelected.setDisabled(not bool(self.mOuput.selectedItems()))
+
+    def connections(self):
+        self.mInput.itemSelectionChanged.connect(self.update_buttons_status)
+        self.mOuput.itemSelectionChanged.connect(self.update_buttons_status)
+        self.mBtnMoveToAvailable.clicked.connect(self.on_mBtnMoveToAvailable_clicked)
+        self.mBtnMoveToSelected.clicked.connect(self.on_mBtnMoveToSelected_clicked)
+        self.mButtonToAvailable.clicked.connect(self.on_mButtonToAvailable_clicked)
+        self.mButtonToSelected.clicked.connect(self.on_mButtonToSelected_clicked)
+        self.mBtnUp.clicked.connect(self.on_mBtnUp_clicked)
+        self.mBtnDown.clicked.connect(self.on_mBtnDown_clicked)
+
+    @QtCore.pyqtSlot()
+    def on_mBtnMoveToAvailable_clicked(self):
+        self.mOuput.addItem(self.mInput.takeItem(self.mInput.currentRow()))
+
+    @QtCore.pyqtSlot()
+    def on_mBtnMoveToSelected_clicked(self):
+        self.mInput.addItem(self.mOuput.takeItem(self.mOuput.currentRow()))
+
+    @QtCore.pyqtSlot()
+    def on_mButtonToAvailable_clicked(self):
+        while self.mOuput.count() > 0:
+            self.mInput.addItem(self.mOuput.takeItem(0))
+
+    @QtCore.pyqtSlot()
+    def on_mButtonToSelected_clicked(self):
+        while self.mInput.count() > 0:
+            self.mOuput.addItem(self.mInput.takeItem(0))
+
+    @QtCore.pyqtSlot()
+    def on_mBtnUp_clicked(self):
+        row = self.mOuput.currentRow()
+        currentItem = self.mOuput.takeItem(row)
+        self.mOuput.insertItem(row - 1, currentItem)
+        self.mOuput.setCurrentRow(row - 1)
+
+    @QtCore.pyqtSlot()
+    def on_mBtnDown_clicked(self):
+        row = self.mOuput.currentRow()
+        currentItem = self.mOuput.takeItem(row)
+        self.mOuput.insertItem(row + 1, currentItem)
+        self.mOuput.setCurrentRow(row + 1)
+
+    def add_left_elements(self, items):
+        self.mInput.addItems(items)
+
+    def add_right_elements(self, items):
+        self.mOuput.addItems(items)
+
+    def get_left_elements(self):
+        return [self.mInput.item(i).text() for i in range(self.mInput.count())]
+
+    def get_right_elements(self):
+        return [self.mOuput.item(i).text() for i in range(self.mOuput.count())]
+
+    def clean_list(self):
+        self.mInput.clear()
+        self.mOuput.clear()

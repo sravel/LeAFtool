@@ -1,7 +1,7 @@
 from PyQt5.QtCore import Qt
 import PyQt5.QtWidgets as qt
 import UsefullVariables as vrb
-from Leaftool_addons.commonWidget import NumberLineEditLabel, FileSelector, style, get_files_ext, allow_ext
+from Leaftool_addons.commonWidget import NumberLineEditLabel, FileSelectorLeaftool, style, get_files_ext, allow_ext
 
 
 class DrawCropMargin(qt.QGroupBox):
@@ -68,19 +68,22 @@ class DrawCropParams(qt.QGroupBox):
         self.setLayout(self.layout)
 
         # Widgets
-        self.images_path = FileSelector(label="Images Path:")
+        self.images_path = FileSelectorLeaftool(label="Images Path:")
         self.images_ext = qt.QComboBox()
         # self.images_ext.setVisible(False)
         self.images_ext.setFixedSize(int(45 * vrb.ratio), int(25 * vrb.ratio))
-        self.out_draw_dir = FileSelector(label="Output Draw:")
-        self.out_cut_dir = FileSelector(label="Output Crop:")
-        self.csv_file = FileSelector(label="CSV file:", file=True)
+        self.out_draw_dir = FileSelectorLeaftool(label="Output Draw:")
+        self.out_cut_dir = FileSelectorLeaftool(label="Output Crop:")
         self.cut_part = DrawCropCutPart()
         self.margin = DrawCropMargin()
 
         self.noise_remove = qt.QCheckBox()
         self.noise_remove.setText("Noise Remove")
         self.noise_remove.setFixedSize(int(120 * vrb.ratio), int(30 * vrb.ratio))
+
+        self.force_rerun = qt.QCheckBox()
+        self.force_rerun.setText("Force rerun")
+        self.force_rerun.setFixedSize(int(120 * vrb.ratio), int(30 * vrb.ratio))
 
         self.numbering = qt.QComboBox()
         self.numbering.addItems(["Bottom", "Right"])
@@ -89,15 +92,16 @@ class DrawCropParams(qt.QGroupBox):
         # Position widgets
         spacerItem = qt.QSpacerItem(10, 10, qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
         self.layout.addWidget(self.images_path, 0, 0, 1, 2)
-        self.layout.addWidget(self.images_ext, 0, 2)
+        self.layout.addWidget(self.images_ext, 0, 3)
         self.layout.addWidget(self.out_draw_dir, 1, 0, 1, 2)
         self.layout.addWidget(self.out_cut_dir, 2, 0, 1, 2)
-        self.layout.addWidget(self.csv_file, 3, 0, 1, 2)
+
         self.layout.addItem(spacerItem, 4, 0, 1, 1)
         self.layout.addWidget(self.cut_part, 5, 0, 1, 1)
         self.layout.addWidget(self.margin, 5, 1, 1, 1)
-        self.layout.addWidget(self.noise_remove, 6, 0, 1, 1)
-        self.layout.addWidget(self.numbering, 6, 1, 1, 1)
+        self.layout.addWidget(self.force_rerun, 6, 0, 1, 1)
+        self.layout.addWidget(self.noise_remove, 6, 1, 1, 1)
+        self.layout.addWidget(self.numbering, 6, 2, 1, 1)
         self.layout.setColumnStretch(0, 1)
         self.layout.setColumnStretch(1, 2)
         self.layout.setColumnStretch(2, 3)
@@ -109,10 +113,6 @@ class DrawCropParams(qt.QGroupBox):
         not_resize = self.out_cut_dir.sizePolicy()
         not_resize.setRetainSizeWhenHidden(True)
         self.out_cut_dir.setSizePolicy(not_resize)
-        not_resize = self.csv_file.sizePolicy()
-        not_resize.setRetainSizeWhenHidden(True)
-        self.csv_file.setSizePolicy(not_resize)
-
         not_resize = self.noise_remove.sizePolicy()
         not_resize.setRetainSizeWhenHidden(True)
         self.noise_remove.setSizePolicy(not_resize)
@@ -126,7 +126,6 @@ class DrawCropParams(qt.QGroupBox):
         self.images_path.lineEditFile.editingFinished.connect(self.update_ext)
         self.out_cut_dir.lineEditFile.editingFinished.connect(self.update_draw_crop_params)
         self.out_draw_dir.lineEditFile.editingFinished.connect(self.update_draw_crop_params)
-        self.csv_file.lineEditFile.editingFinished.connect(self.update_draw_crop_params)
         self.cut_part.x_pieces.lineEdit.editingFinished.connect(self.update_draw_crop_params)
         self.cut_part.y_pieces.lineEdit.editingFinished.connect(self.update_draw_crop_params)
         self.margin.left.lineEdit.editingFinished.connect(self.update_draw_crop_params)
@@ -134,33 +133,36 @@ class DrawCropParams(qt.QGroupBox):
         self.margin.right.lineEdit.editingFinished.connect(self.update_draw_crop_params)
         self.margin.bottom.lineEdit.editingFinished.connect(self.update_draw_crop_params)
         self.noise_remove.stateChanged.connect(self.update_draw_crop_params)
+        self.force_rerun.stateChanged.connect(self.update_draw_crop_params)
         self.images_ext.currentIndexChanged.connect(self.update_draw_crop_params)
         self.numbering.currentIndexChanged.connect(self.update_draw_crop_params)
 
     def update_draw_crop_params(self):
-        try:
-            if not self.loading:
-                self.parent.dict_for_yaml["DRAWCROP"]["images_path"] = self.images_path.lineEditFile.text()
-                self.parent.dict_for_yaml["DRAWCROP"]["out_draw_dir"] = self.out_draw_dir.lineEditFile.text()
-                self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"] = self.out_cut_dir.lineEditFile.text()
-                self.parent.dict_for_yaml["log_path"] = self.out_cut_dir.lineEditFile.text()
-                self.parent.dict_for_yaml["DRAWCROP"]["csv_file"] = self.csv_file.lineEditFile.text()
-                if self.parent.dict_for_yaml["RUNSTEP"]["ML"] or self.parent.dict_for_yaml["RUNSTEP"]["merge"]:
-                    self.parent.dict_for_yaml["ML"]["images_path"] = self.out_cut_dir.lineEditFile.text()
-                self.parent.layer_ml_merge.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"])
-                self.parent.dict_for_yaml["DRAWCROP"]["x_pieces"] = int(self.cut_part.x_pieces.lineEdit.text())
-                self.parent.dict_for_yaml["DRAWCROP"]["y_pieces"] = int(self.cut_part.y_pieces.lineEdit.text())
-                self.parent.dict_for_yaml["DRAWCROP"]["left"] = int(self.margin.left.lineEdit.text())
-                self.parent.dict_for_yaml["DRAWCROP"]["top"] = int(self.margin.top.lineEdit.text())
-                self.parent.dict_for_yaml["DRAWCROP"]["right"] = int(self.margin.right.lineEdit.text())
-                self.parent.dict_for_yaml["DRAWCROP"]["bottom"] = int(self.margin.bottom.lineEdit.text())
-                self.parent.dict_for_yaml["DRAWCROP"]["noise_remove"] = bool(self.noise_remove.isChecked())
-                self.parent.dict_for_yaml["DRAWCROP"]["extension"] = self.images_ext.currentText()
-                self.parent.dict_for_yaml["DRAWCROP"]["numbering"] = self.numbering.currentText()
-                self.parent.preview_config.setText(self.parent.export_use_yaml)
-        except Exception as e:
-            print(f"WARNING update_draw_crop_params: {e}")
-            pass
+        # try:
+        if not self.loading:
+            # from pprint import pprint as pp
+            # pp(self.parent.dict_for_yaml)
+            self.parent.dict_for_yaml["DRAWCROP"]["images_path"] = self.images_path.lineEditFile.text()
+            self.parent.dict_for_yaml["DRAWCROP"]["out_draw_dir"] = self.out_draw_dir.lineEditFile.text()
+            self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"] = self.out_cut_dir.lineEditFile.text()
+            self.parent.dict_for_yaml["log_path"] = self.out_cut_dir.lineEditFile.text()
+            if self.parent.dict_for_yaml["RUNSTEP"]["ML"] or self.parent.dict_for_yaml["RUNSTEP"]["merge"]:
+                self.parent.dict_for_yaml["ML"]["images_path"] = self.out_cut_dir.lineEditFile.text()
+            self.parent.layer_ml_merge.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"])
+            self.parent.dict_for_yaml["DRAWCROP"]["x_pieces"] = int(self.cut_part.x_pieces.lineEdit.text())
+            self.parent.dict_for_yaml["DRAWCROP"]["y_pieces"] = int(self.cut_part.y_pieces.lineEdit.text())
+            self.parent.dict_for_yaml["DRAWCROP"]["left"] = int(self.margin.left.lineEdit.text())
+            self.parent.dict_for_yaml["DRAWCROP"]["top"] = int(self.margin.top.lineEdit.text())
+            self.parent.dict_for_yaml["DRAWCROP"]["right"] = int(self.margin.right.lineEdit.text())
+            self.parent.dict_for_yaml["DRAWCROP"]["bottom"] = int(self.margin.bottom.lineEdit.text())
+            self.parent.dict_for_yaml["DRAWCROP"]["noise_remove"] = bool(self.noise_remove.isChecked())
+            self.parent.dict_for_yaml["DRAWCROP"]["force_rerun"] = bool(self.force_rerun.isChecked())
+            self.parent.dict_for_yaml["DRAWCROP"]["extension"] = self.images_ext.currentText()
+            self.parent.dict_for_yaml["DRAWCROP"]["numbering"] = self.numbering.currentText()
+            self.parent.preview_config.setText(self.parent.export_use_yaml)
+        # except Exception as e:
+        #     print(f"WARNING update_draw_crop_params: {e}")
+        #     pass
 
     def upload_draw_crop_params(self):
         self.loading = True
@@ -168,7 +170,6 @@ class DrawCropParams(qt.QGroupBox):
             self.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["images_path"])
             self.out_draw_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_draw_dir"])
             self.out_cut_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"])
-            self.csv_file.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["csv_file"])
             self.cut_part.x_pieces.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["x_pieces"]))
             self.cut_part.y_pieces.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["y_pieces"]))
             self.margin.left.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["left"]))
@@ -176,6 +177,7 @@ class DrawCropParams(qt.QGroupBox):
             self.margin.right.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["right"]))
             self.margin.bottom.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["bottom"]))
             self.noise_remove.setChecked(bool(self.parent.dict_for_yaml["DRAWCROP"]["noise_remove"]))
+            self.force_rerun.setChecked(bool(self.parent.dict_for_yaml["DRAWCROP"]["force_rerun"]))
             self.images_ext.addItem(self.parent.dict_for_yaml["DRAWCROP"]["extension"])
             self.images_ext.setCurrentText(self.parent.dict_for_yaml["DRAWCROP"]["extension"])
             self.update_ext()
@@ -186,9 +188,7 @@ class DrawCropParams(qt.QGroupBox):
         if self.parent.layer_tools.draw_checkbox.isChecked() or self.parent.layer_tools.crop_checkbox.isChecked():
             self.setVisible(True)
             self.out_draw_dir.setVisible(self.parent.layer_tools.draw_checkbox.isChecked())
-            self.csv_file.setVisible(self.parent.layer_tools.draw_checkbox.isChecked())
             self.out_cut_dir.setVisible(self.parent.layer_tools.crop_checkbox.isChecked())
-            self.csv_file.setVisible(self.parent.layer_tools.crop_checkbox.isChecked())
             self.noise_remove.setVisible(self.parent.layer_tools.crop_checkbox.isChecked())
             self.numbering.setVisible(self.parent.layer_tools.crop_checkbox.isChecked())
         else:
@@ -201,3 +201,28 @@ class DrawCropParams(qt.QGroupBox):
             self.images_ext.addItems(ext_list)
             self.images_ext.setCurrentIndex(0)
             self.images_ext.setVisible(True)
+
+
+if __name__ == '__main__':
+    from PyQt5.QtCore import Qt, QCoreApplication
+    import sys
+
+    app = QCoreApplication.instance()
+    if app is None:
+        app = qt.QApplication([])
+
+    sys._excepthook = sys.excepthook
+
+
+    def exception_hook(exctype, value, traceback):
+        print(exctype, value, traceback)
+        sys._excepthook(exctype, value, traceback)
+        sys.exit(1)
+
+    sys.excepthook = exception_hook
+
+    foo = DrawCropParams(parent=None)
+
+    # foo.showMaximized()
+    foo.show()
+    app.exec_()

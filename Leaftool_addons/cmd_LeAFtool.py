@@ -156,6 +156,120 @@ def outset_to_df(infoSet):
     return df_t
 
 
+class MetaInfo:
+    """Object to read csv table to build name, keep meta info"""
+
+    def __init__(self, csv_path, rename_oder=None):
+        """
+        Args:
+            csv_path: (:obj:`str`): Path to csv with meta-info
+        """
+        self.path_csv = csv_path
+        self.rename_order = rename_oder
+        self.header = None
+        self.dataframe = None
+        self.dataframe_with_crop_name = None
+        self.__dict_names_pos = None
+        self.__list_filenames = None
+        self.rename_to_df = {}
+        self.exit_status = False
+
+        self.__load_metadata_csv_to_dict()
+        self.__build_meta_to_rename()
+        self.build_dataframe_with_crop_name()
+
+    def __load_metadata_csv_to_dict(self):
+        """ Load csv file into dict use for rename scan
+            The dataframe must contain header for columns
+            The 2 first columns are use as dict key (tuple key with scan name and crop position)
+
+        Args:
+            csv_file (:obj:`str`): Path to csv file
+        """
+        if not Path(self.path_csv).exists():
+            raise FileNotFoundError(f"CSV file '{self.path_csv}' doesn't exist !!! exit")
+
+        with open(self.path_csv, "r") as csv:
+            header_txt = csv.readline().rstrip()
+        sep_dict = {",": header_txt.count(","),
+                    ";": header_txt.count(";"),
+                    ".": header_txt.count("."),
+                    "\t": header_txt.count("\t")
+                    }
+        csv_separator = max(sep_dict, key=sep_dict.get)
+        self.header = header_txt.split(csv_separator)
+        # check rename_order on header
+        if not self.rename_order:
+            self.rename_order = self.header[:3]
+        for elm in self.rename_order:
+            if elm not in self.header:
+                raise ValueError(f"Value '{elm}' in not on the header file {self.path_csv}, found: {self.header}")
+
+        df = pd.read_csv(self.path_csv, index_col=[0, 1], header=0, sep=csv_separator)
+        self.dataframe = pd.read_csv(self.path_csv, header=0, sep=csv_separator).reset_index(drop=True)
+        self.__dict_names_pos = df.to_dict('index')
+        self.__list_filenames = [str(key1) for (key1, key2) in self.__dict_names_pos.keys()]
+
+    def check_corresponding(self, files_list):
+        """test if all scan file have name on csv file"""
+        # try:
+        not_found_list = []
+        for img_file in files_list:
+            basename = img_file.stem
+            if basename not in self.__list_filenames:
+                not_found_list.append(img_file.name)
+        if not_found_list:
+            self.exit_status = False
+            txt_list = '\n - '.join([""] + not_found_list)
+            raise NameError(f"Not found corresponding name for scan:{txt_list}")
+        self.exit_status = True
+        # except NameError as e:
+        #     print(e)
+        #     self.logger.error(e)
+
+    def __build_meta_to_rename(self):
+        if not self.rename_to_df:
+            for scan_name, pos in self.__dict_names_pos:
+                df = self.dataframe.query(f'{self.header[0]}=="{scan_name}" & {self.header[1]}=={pos}').copy(deep=True)
+                rename = "_".join([str(df[elm].values[0]) for elm in self.rename_order])
+                df["crop_name"] = rename
+                self.__dict_names_pos[(scan_name, pos)].update({"crop_name": rename})
+                self.rename_to_df[rename] = df.reset_index(drop=True)
+
+    def build_dataframe_with_crop_name(self):
+        df_list = [v for k, v in self.rename_to_df.items()]
+        self.dataframe_with_crop_name = pd.concat(df_list, axis=0, ignore_index=True).reset_index(drop=True)
+        # self.dataframe_with_crop_name = pd.concat([pd.concat(v) for k,v in self.rename_to_df.items()])
+
+    def check_correspondingML(self, files_list):
+        """test if all scan file have name on csv file"""
+        pass
+        # try:
+        # not_found_list = []
+        # for img_file in files_list:
+        #     basename = img_file.stem
+        #     if basename not in self.__list_filenames:
+        #         not_found_list.append(img_file.name)
+        # if not_found_list:
+        #     self.exit_status = False
+        #     txt_list = '\n - '.join([""]+not_found_list)
+        #     raise NameError(f"Not found corresponding name for scan:{txt_list}")
+        # self.exit_status = True
+        # # except NameError as e:
+        # #     print(e)
+        # #     self.logger.error(e)
+
+    def rename_to_meta(self, scan_name):
+        return self.rename_to_df[scan_name]
+
+    def meta_to_crop_rename(self, scan_name, pos):
+        return self.__dict_names_pos[(scan_name, pos)]["crop_name"]
+
+    def __repr__(self):
+        # return f"{self.__class__}({pp(self.__dict__)})"
+        return f"{self.dataframe_with_crop_name}"
+
+
 class CropAndCutImages:
     """
     Object to crop and cut scan images on folder.
@@ -163,12 +277,14 @@ class CropAndCutImages:
     When cut use dataframe to rename scan images
     """
 
-    def __init__(self, scan_folder, extension='jpg', x_pieces=2, y_pieces=2, top=0, left=0, bottom=0, right=0,
+    def __init__(self, scan_folder, rename=None, extension='jpg', x_pieces=2, y_pieces=2, top=0, left=0, bottom=0,
+                 right=0,
                  noise_remove=False, numbering="right", plant_model=None, force_rerun=False):
         """Created the objet
 
         Args:
             scan_folder (:obj:`str`): Path to scan images
+            rename (:obj:`list`): List of columns header used to rename crop image (default first 2 columns)
             extension (:obj:`str`): The scan images extension, must be the same for all scan. allow extension are:[
             "jpg", "JPG", "PNG", "png", "BMP", "bmp", "tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]
             x_pieces (:obj:`int`): Number of vertical crop
@@ -187,6 +303,7 @@ class CropAndCutImages:
         self.logger = logging.getLogger('CropAndCutImages')
         # input
         self.__scan_folder = Path(scan_folder)
+        self.rename_order = rename
         self.extension = extension
 
         # params
@@ -202,40 +319,15 @@ class CropAndCutImages:
         self.plant_model = plant_model
         self.force_rerun = force_rerun
         # others
-        self.__list_filenames = []
-        self.__dict_names_pos = {}
+        self.meta_info = None
+
         self.__allow_ext = ["jpg", "JPG", "PNG", "png", "BMP", "bmp", "tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]
-        self.exit_status = False # to now exit status if fail some step
+        self.exit_status = False  # to now exit status if fail some step
 
         # call functions
         self.__check_input()
         message = ", ".join([f"{key}:{value}" for key, value in self.params.items()])
         self.logger.info(f"CropImage parameters: {message}")
-
-    def __load_metadata_csv_to_dict(self, csv_file):
-        """ Load csv file into dict use for rename scan
-            The dataframe must contain header for columns
-            The 2 first columns are use as dict key (tuple key with scan name and crop position)
-
-        Args:
-            csv_file (:obj:`str`): Path to csv file
-        """
-        if not Path(csv_file).exists():
-            raise FileNotFoundError(f"CSV file '{csv_file}' doesn't exist !!! exit")
-
-        with open(csv_file, "r") as csv:
-            header = csv.readline()
-        sep_dict = {",": header.count(","),
-                    ";": header.count(";"),
-                    ".": header.count("."),
-                    "\t": header.count("\t")
-                    }
-
-        csv_separator = max(sep_dict, key=sep_dict.get)
-
-        df = pd.read_csv(csv_file, index_col=[0, 1], header=0, sep=csv_separator)
-        self.__dict_names_pos = df.to_dict('index')
-        self.__list_filenames = [str(key1) for (key1, key2) in self.__dict_names_pos.keys()]
 
     def __check_input(self):
         """ check inputs values"""
@@ -283,24 +375,6 @@ class CropAndCutImages:
         imageIP = util.convertImg(imageIP, PyIPSDK.eImageBufferType.eIBT_UInt16)
         return imageIP
 
-    def __check_corresponding(self):
-        """test if all scan file have name on csv file"""
-        # try:
-        not_found_list = []
-        for img_file in self.__scan_folder.glob(f"*.{self.extension}"):
-            basename = img_file.stem
-            if basename not in self.__list_filenames:
-                not_found_list.append(img_file.name)
-        if not_found_list :
-            self.exit_status = False
-            txt_list = '\n - '.join([""]+not_found_list)
-            raise NameError(f"Not found corresponding name for scan:{txt_list}")
-        self.exit_status = True
-        # except NameError as e:
-        #     print(e)
-        #     self.logger.error(e)
-
-
     def loop_crop(self, cutdir_name, csv_file):
         """Run crop on images files
 
@@ -308,29 +382,10 @@ class CropAndCutImages:
             cutdir_name (:obj:`str`): the output directory to store crop images
             csv_file (:obj:`str`): The file use to rename images
         """
-        def __return_banana_name():
-            project = str(self.__dict_names_pos[(basename, position)]['projet']).replace('/', '-').replace(' ', '')
-            banana = str(self.__dict_names_pos[(basename, position)]['banana']).replace('_', '-').replace(' ', '')
-            strain = str(self.__dict_names_pos[(basename, position)]['strain']).replace('_', '-').replace(' ', '')
-            repetition = str(self.__dict_names_pos[(basename, position)]['repetition']).replace('_', '-').replace(' ', '')
-            dpi = str(self.__dict_names_pos[(basename, position)]['dpi']).replace('_', '-').replace(' ', '')
-            file_name = f"{cut_dir_path}/{project}_b{banana}_s{strain}_r{repetition}_d{dpi}.tif"
-            return file_name
 
-        def __return_rice_name():
-            date = self.__dict_names_pos[(basename, position)]['date'].replace('/', '-').replace(' ', '')
-            DD, MM, YY = date.split("-")
-            date = f"{YY}-{MM}-{DD}"
-            rice = self.__dict_names_pos[(basename, position)]['rice'].replace('_', '-').replace(' ', '')
-            strain = self.__dict_names_pos[(basename, position)]['strain'].replace('_', '-').replace(' ', '')
-            file_name = f"{cut_dir_path}/{date}_{basename[8:-3]}_{rice}_{strain}.tif"
-            return file_name
-
-        def save_image():
-            if self.plant_model == "banana":
-                file_name = __return_banana_name()
-            elif self.plant_model == "rice":
-                file_name = __return_rice_name()
+        def save_image(img, pos):
+            basename = self.meta_info.meta_to_crop_rename(scan_name=img, pos=pos)
+            file_name = cut_dir_path.joinpath(f"{basename}.tif")
             if not Path(file_name).exists():
                 x, y, w, h = box
                 im_crop = im_borderless[y: h, x: w].copy()
@@ -339,26 +394,27 @@ class CropAndCutImages:
                 if self.noise_rm:
                     # image noise removal
                     imageIP = morpho.unionLinearOpening2dImg(imageIP, 3.0, PyIPSDK.eBEP_Disable)
-                PyIPSDK.saveTiffImageFile(file_name, imageIP)
-                self.logger.info(f" - {file_name}")
+                PyIPSDK.saveTiffImageFile(file_name.as_posix(), imageIP)
+                self.logger.info(f" - {file_name.name}")
             else:
-                self.logger.warning(f" - {file_name} already cut")
+                self.logger.warning(f" - {file_name.name} already cut")
 
         self.logger.info("~~~~~~~~~ START STEP CUT ~~~~~~~~~")
-
         self.logger.info(f"LOAD CSV FILE: {csv_file}")
-        self.__load_metadata_csv_to_dict(csv_file)
-        self.__check_corresponding()
+        files = self.__scan_folder.glob(f"*.{self.extension}")
+        self.meta_info = MetaInfo(csv_path=csv_file, rename_oder=self.rename_order)
+        self.meta_info.check_corresponding(files_list=files)
+        self.exit_status = self.meta_info.exit_status
         cut_dir_path = self.__scan_folder.joinpath(cutdir_name)
         cut_dir_path.mkdir(exist_ok=True)
+        self.logger.info(f"CUT dir path is: {cut_dir_path}")
         nb_files = len(list(self.__scan_folder.glob(f"*.{self.extension}")))
         if nb_files == 0:
             raise FileNotFoundError(
-                f"Not found file extension '.{self.extension}' on folder: {self.__scan_folder.as_posix()}")
-        if self.exit_status:
+                f"Not found file extension with'.{self.extension}' on folder: {self.__scan_folder.as_posix()}")
+        if self.meta_info.exit_status:
             for scan_num, img_file in enumerate(self.__scan_folder.glob(f"*.{self.extension}"), 1):
                 self.logger.info(f"CROP IMAGE FILE {scan_num}/{nb_files}:\t{img_file.name} to ")
-                basename = img_file.stem
                 image = cv2.imread(img_file.as_posix())
                 im_borderless = image[self.params["top"]:image.shape[0] - self.params["bottom"],
                                 self.params["left"]:image.shape[1] - self.params["right"]]
@@ -371,13 +427,13 @@ class CropAndCutImages:
                     for i in range(0, self.params["y_pieces"]):
                         for j in range(0, self.params["x_pieces"]):
                             box = (j * width, i * height, (j + 1) * width, (i + 1) * height)
-                            save_image()
+                            save_image(img_file.stem, position)
                             position += 1
                 elif self.numbering == "bottom":
                     for i in range(0, self.params["x_pieces"]):
                         for j in range(0, self.params["y_pieces"]):
                             box = (i * width, j * height, (i + 1) * width, (j + 1) * height)
-                            save_image()
+                            save_image(img_file.stem, position)
                             position += 1
         self.logger.info("~~~~~~~~~ END STEP CUT ~~~~~~~~~")
 
@@ -436,13 +492,18 @@ class AnalysisImages:
     Object to perform ML analysis on images.
     """
 
-    def __init__(self, scan_folder, model_name, calibration_value=1, small_object=100, border=0, alpha=0.5,
-                 noise_remove=False, split_ML=False, force_rerun=True, draw_ML_image=False, plant_model=None):
+    def __init__(self, scan_folder, model_name, csv_file, rename, calibration_name=None, small_object=100, border=0,
+                 alpha=0.5,
+                 noise_remove=False, split_ML=False, force_rerun=True, draw_ML_image=False, plant_model=None,
+                 model_name_classification=None):
         """
         Args:
             scan_folder (:obj:`str`): Path to scan images
             model_name (:obj:`int`): The IPSDK PixelClassification model name build with Explorer
-            calibration_value (:obj:`float`): The cm calibration for 1px Default: 1
+            model_name_classification (:obj:`int`): The IPSDK Classification model name build with Explorer
+            csv_file (:obj:`str`): The file use to rename images
+            rename (:obj:`list`): List of columns header used to rename crop image (default first 2 columns)
+            calibration_name (:obj:`str`): Name of Explorer calibration, no calibration if empty
             small_object (:obj:`int`): The minimum area of class, to remove small noise detect object Default: 100
             border (:obj:`int`): The diameter of the brush (in pixels) used to erode the leaf Default: 0
             alpha (:obj:`float`): The degree of transparency of overlay color label. Must float 0 <= alpha <= 1
@@ -457,10 +518,14 @@ class AnalysisImages:
         self.logger = logging.getLogger('AnalysisImages')
         self.plant_model = plant_model
         self.split_ML = split_ML
+        self.meta_file = csv_file
+        self.rename_order = rename
+        self.meta_info = MetaInfo(csv_path=csv_file, rename_oder=rename)
+
         # Load machine learning model
         self.model_name = model_name
         self.model_path = None
-        self.calibration_value = calibration_value
+        self.calibration_obj = Calibration(calibration_name=calibration_name)
         self.small_object = small_object
         self.border_leaf = border
         self.alpha = alpha
@@ -475,6 +540,7 @@ class AnalysisImages:
         self.csv_list = []
         self.table_leaves = []
         self.draw_ML_image = draw_ML_image
+        self.model_name_classification = model_name_classification
 
         # TODO add csv_path_merge to user argument ?
         self.csv_path_merge = self.basedir.joinpath("global-merge.csv").as_posix()
@@ -509,8 +575,6 @@ class AnalysisImages:
         else:
             raise FileNotFoundError(
                 f"The model '{self.model_name}' doesn't exist on IPSDK, please check name with explorer!!!!")
-        self.__validate_number(key="calibration_value", value=self.calibration_value, type_value=float, min_value=0,
-                               max_value=1000)
         self.__validate_number(key="small_object", value=self.small_object, type_value=int, min_value=0,
                                max_value=100000000)
         self.__validate_number(key="border_leaf", value=self.border_leaf, type_value=int, min_value=0, max_value=1000)
@@ -567,7 +631,7 @@ class AnalysisImages:
         mask_overlay_files_filter_set = set(
             sorted(f"{path.stem.replace('_mask_overlay', '')}" for path in self.mask_overlay_files))
 
-        self.csv_list = [self.basedir.joinpath(path) for path in
+        self.csv_list = [self.basedir.joinpath(path).as_posix() for path in
                          glob_re(r'.*_merge-lesion\.csv$', os.listdir(self.basedir.as_posix()))]
 
         basename_files_to_run = list(full_files_set - mask_overlay_files_filter_set)
@@ -575,6 +639,7 @@ class AnalysisImages:
             self.files_to_run = self.full_files
         else:
             self.files_to_run = sorted([file for file in self.full_files if f"{file.stem}" in basename_files_to_run])
+        self.meta_info.check_correspondingML(files_list=self.files_to_run)
 
     def run_ML(self):
         """loop to apply ML on all images"""
@@ -596,8 +661,9 @@ class AnalysisImages:
             sep: CSV output separator
             rm_merge: if True, remove intermediate csv files Default: False
         """
-        df = (pd.read_csv(f, sep=sep) for f in self.csv_list)
-        df = pd.concat(df).fillna(0)
+        df_list = (pd.read_csv(f, sep=sep) for f in self.csv_list)
+        df = pd.concat(df_list, ignore_index=True).fillna(0)
+        df.sort_values(["scan_name", "position"], ascending=(True, True), inplace=True)
         with open(self.csv_path_merge, "w") as libsizeFile:
             df.to_csv(libsizeFile, index=False, sep=sep, float_format='%.2f')
         if rm_merge:
@@ -648,7 +714,8 @@ class AnalysisImages:
                 leaf.analysis(model_load=self.model_load,
                               model_to_label_dict=self.model_to_label_dict,
                               small_object=self.small_object,
-                              calibration_value=self.calibration_value)
+                              calibration_obj=self.calibration_obj,
+                              model_name_classification=self.model_name_classification)
                 dict_frames_separated_leaves.update(leaf.dico_frames_separated)
 
                 # add leaf mask to full leaves overlay
@@ -764,28 +831,10 @@ class AnalysisImages:
         image.array[2, y:y + h, x + w - e:x + w + e] = color[2]
 
     def __append_col_df(self, basename, df):
-        if self.plant_model == "banana":
-            tab = basename.split("_")
-            project, banana, strain, repetition, dpi = tab[0], tab[1], tab[2], tab[3], tab[4]
-            df.insert(0, "Project", project)
-            df.insert(0, "Banana", banana)
-            df.insert(0, "Strain", strain)
-            df.insert(0, "Repetition", repetition)
-            df.insert(0, "dpi", dpi)
-            df.insert(0, "filename", basename)
-            return df
-        elif self.plant_model == "rice":
-            tab = basename.split("_")
-            date, rep, rice, strain = tab[0], tab[1], tab[2], tab[3]
-            df.insert(0, "strain", strain)
-            df.insert(0, "Rice", rice)
-            df.insert(0, "Rep", rep.split("-")[0])
-            df.insert(0, "Manip", rep)
-            df.insert(0, "Date", date)
-            if len(tab) == 5:
-                df.insert(0, "leaf_ID", tab[4])
-            df.insert(0, "filename", basename)
-            return df
+        # print(f"APPEND DF {basename} {df}")
+        df.insert(0, "crop_name", basename)
+        df_merge = pd.merge(self.meta_info.dataframe_with_crop_name, df, on="crop_name")
+        return df_merge
 
     def __build_df_split(self, basename, result_separated=None):
         # all leaf and all lesions
@@ -854,7 +903,8 @@ class AnalysisImages:
         df = self.__append_col_df(basename, df)
         # save results to csv format
         csv_path_file = self.basedir.joinpath(f"{basename}_merge-lesion.csv").as_posix()
-        self.csv_list.append(csv_path_file)
+        if csv_path_file not in self.csv_list:
+            self.csv_list.append(csv_path_file)
         # print(f"CSV SAVE AT {csv_path_file}")
         df.to_csv(csv_path_file, index=False, sep="\t", float_format='%.2f')
 
@@ -911,7 +961,7 @@ class AnalysisImages:
             # split PCA RGB
             imagePCA, eigenValues, eigenVectors, matrixRank = classif.pcaReductionImg(loaded_image)
             if self.plant_model == "banana":
-                img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 0, imagePCA))
+                img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
             elif self.plant_model == "rice":
                 img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
             # ui.displayImg(img1, pause=True)
@@ -922,17 +972,23 @@ class AnalysisImages:
 
         # ui.displayImg(all_mask, pause=True)
         # suppression des artefacts pour obtenir le mask des feuilles
+        # ui.displayImg(all_mask, pause=True, title="all_maskLeaf")
         if self.plant_model == "banana":
             all_mask_filter = advmorpho.removeBorder2dImg(all_mask)
             all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask_filter, small_size)
+            structuringElement = PyIPSDK.circularSEXYInfo(3)
+            all_mask_filter = morpho.closing2dImg(all_mask_filter, structuringElement, PyIPSDK.eBEP_Disable)
+            # ui.displayImg(all_mask_filter, pause=True, title="all_mask_filter")
         else:
             all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask, small_size)
-        all_mask_filter_bin = advmorpho.binaryReconstruction2dImg(all_mask, all_mask_filter)
-        all_mask_filter_bin = advmorpho.fillHole2dImg(all_mask_filter_bin)
-        # ui.displayImg(all_mask_filter_bin, pause=True)
+        # all_mask_filter_bin = advmorpho.binaryReconstruction2dImg(all_mask, all_mask_filter)
+        # ui.displayImg(all_mask_filter_bin, pause=True, title="all_mask_filter_bin")
+        all_mask_filter_bin = advmorpho.fillHole2dImg(all_mask_filter)
+        # ui.displayImg(all_mask_filter_bin, pause=True, title="all_mask_filter_bin")
         # trim the edge of the leaf to remove the plastic cover
         structuringElement = PyIPSDK.circularSEXYInfo(int(self.border_leaf))
         all_mask_filter_bin = morpho.erode2dImg(all_mask_filter_bin, structuringElement)
+        # ui.displayImg(all_mask_filter_bin, pause=True, title="all_mask_filter_bin erode")
 
         # split to separated labels (creation mask)
         all_mask_label = advmorpho.connectedComponent2dImg(all_mask_filter_bin,
@@ -986,28 +1042,74 @@ class AnalysisImages:
             return None
 
     def merge_images(self, rm_original=False, extension="jpg"):
-        # TODO include force_rerun True False to merge only run
         self.logger.info("~~~~~~~~~ START STEP MERGE IMAGES ~~~~~~~~~")
         from PIL import Image
         merge_dir_path = self.basedir.joinpath("merge_images")
         merge_dir_path.mkdir(exist_ok=True)
-        if len(self.full_files) == 0 or len(self.mask_overlay_files) == 0:
-            raise FileNotFoundError(
-                f"Not found sames files list:\n\t- {[elm.name for elm in self.full_files]}\n\t- "
-                f"{[elm.name for elm in self.mask_overlay_files]}")
-        for img1, img2 in zip(self.full_files, self.mask_overlay_files):
-            image1 = Image.open(img1)
-            image2 = Image.open(img2)
-            images_comb = Image.new('RGB', (image1.width + image2.width, min(image1.height, image2.height)))
-            images_comb.paste(image1, (0, 0))
-            images_comb.paste(image2, (image1.width, 0))
-            outname = merge_dir_path.joinpath(f"{img1.stem}.{extension}")
-            self.logger.info(f" - MERGE files  {img1.name} and {img2.name} to {Path(outname).name}")
-            images_comb.save(outname)
-            if rm_original:
-                Path(img1).unlink(missing_ok=True)
-                Path(img2).unlink(missing_ok=True)
+        if len(self.full_files) == 0:
+            raise FileNotFoundError(f"Files not found")
+        if len(self.mask_overlay_files) == 0:
+            raise FileNotFoundError(f"Not found overlay images")
+
+        com, u1, u2 = compare_list(self.full_files, self.mask_overlay_files)
+        for img1 in self.full_files:
+            basename = Path(img1).name
+            if basename in com:
+                img2 = Path(img1).as_posix().replace(".tif", "_mask_overlay.tif")
+                image1 = Image.open(img1)
+                image2 = Image.open(img2)
+                images_comb = Image.new('RGB', (image1.width + image2.width, min(image1.height, image2.height)))
+                images_comb.paste(image1, (0, 0))
+                images_comb.paste(image2, (image1.width, 0))
+                outname = merge_dir_path.joinpath(f"{img1.stem}.{extension}")
+                self.logger.info(f" - MERGE files  {Path(img1).name} and {Path(img2).name} to {Path(outname).name}")
+                images_comb.save(outname)
+                if rm_original:
+                    # Path(img1).unlink(missing_ok=True)
+                    Path(img2).unlink(missing_ok=True)
+            else:
+                self.logger.warning(f"File {img1} doesn't have overlay")
         self.logger.info("~~~~~~~~~ END STEP MERGE IMAGES ~~~~~~~~~")
+
+
+class Calibration:
+    def __init__(self, calibration_name):
+        self.calibration_available = []
+        self.calibration_name = calibration_name
+        self.dico_info = {"unit": "px", "value": 1}
+        try:
+            file = xmlet.parse(vrb.folderInformation + "/UserCalibrations.mho")
+            calibrationsElement = file.getroot()
+        except:
+            calibrationsElement = xmlet.Element('Calibrations')
+            newCalibration = xmlet.SubElement(calibrationsElement, "Calibration")
+            self.create_empty_calibration(newCalibration, name="No calibration")
+        for element in calibrationsElement:
+            self.calibration_available.append(Dfct.SubElement(element, "Name").text)
+            if Dfct.SubElement(element, "Name").text == calibration_name:
+                # print(Dfct.SubElement(element, "Name").text)
+                # print(Dfct.SubElement(element, "Unit").text)
+                # print(Dfct.SubElement(element, "SquarePixel").text)
+                # print(Dfct.SubElement(element, "SquareValue").text)
+                self.dico_info = {"unit": Dfct.SubElement(element, "Unit").text,
+                                  "value": float(Dfct.SubElement(element, "SquareValue").text) /
+                                           float(Dfct.SubElement(element, "SquarePixel").text),
+                                  }
+        if self.calibration_name not in self.calibration_available:
+            raise ValueError(f"Calibration '{self.calibration_name}' is not on available value: {self.calibration_available}")
+
+    @staticmethod
+    def create_empty_calibration(element, name="New calibration"):
+        Dfct.SubElement(element, "Name").text = name
+        Dfct.SubElement(element, "Choice").text = "0"
+        Dfct.SubElement(element, "Unit").text = "px"
+        Dfct.SubElement(element, "SquarePixel").text = "1"
+        Dfct.SubElement(element, "SquareValue").text = "1"
+        Dfct.SubElement(element, "XPixel").text = "1"
+        Dfct.SubElement(element, "XValue").text = "1"
+        Dfct.SubElement(element, "YPixel").text = "1"
+        Dfct.SubElement(element, "YValue").text = "1"
+        Dfct.SubElement(element, "ZPixel").text = "1"
 
 
 class Leaf:
@@ -1027,8 +1129,11 @@ class Leaf:
         self.image_ipsdk_blend = None
 
         self.dico_frames_separated = {}
+        self.model_name_classification = None
 
-    def analysis(self, model_load, model_to_label_dict, small_object, calibration_value, save_cut=False):
+    def analysis(self, model_load, model_to_label_dict, small_object, calibration_obj, save_cut=False,
+                 model_name_classification=None):
+        self.model_name_classification = model_name_classification
         ipsdk_img = util.getROI2dImg(self.full_leaves_ipsdk_img, self.x_position, self.y_position, self.x_size,
                                      self.y_size)
         if save_cut:
@@ -1055,49 +1160,60 @@ class Leaf:
                 nbLabels = glbmsr.statsMsr2d(all_masks).max
                 if label.lower() in ["leaf"]:
                     split_mask = bin.thresholdImg(all_masks, 1, nbLabels)
-                else:
-                    split_mask = bin.thresholdImg(all_masks, i, i)
-                # split mask to individual label
-                split_mask_separated = advmorpho.connectedComponent2dImg(split_mask,
-                                                                         PyIPSDK.eNeighborhood2dType.eN2T_4Connexity)
-                # remove small elements if < x px on connected
-                if label.lower() in ["leaf"]:
                     # replace with keep big shapes
                     calibration = PyIPSDK.createGeometricCalibration2d(1, 1, 'px')
                     inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
                     PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "NbPixels2dMsr")
+                    split_mask_separated = advmorpho.adaptiveBinaryWatershed2dImg(split_mask, 0.5,
+                                                                                  PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
                     output = shapeanalysis.labelAnalysis2d(split_mask_separated, split_mask_separated,
                                                            inMeasureInfoSet2d)
                     df = outset_to_df(output)
                     max_leaf_size = max(df["Number of pixels"]) - 100
                     split_mask_separated_filter = advmorpho.removeSmallShape2dImg(split_mask_separated, max_leaf_size)
                 else:
-                    split_mask_separated_filter = advmorpho.removeSmallShape2dImg(split_mask_separated, small_object)
-                # ui.displayImg(split_mask, pause=True)
-                split_mask_filter = bin.lightThresholdImg(split_mask_separated_filter, 1)
+                    split_mask = bin.thresholdImg(all_masks, i, i)
+                    # remove small elements if < x px on connected
+                    split_mask_filter = advmorpho.removeSmallShape2dImg(split_mask, small_object)
+                    # split mask to individual label
 
-                split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
-                label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i - 1)
-                self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
+                    split_mask_separated_filter = advmorpho.adaptiveBinaryWatershed2dImg(split_mask_filter, 0.5,
+                                                                                         PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                    # ui.displayImg(split_mask, pause=True)
 
-                if label.lower() not in ["leaf"]:
-                    split_mask_filter_Label16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_Label16)
-                    # ui.displayImg(split_mask_filter_Label16, pause=True, title=f"{label}split_mask_filter_Label16 ON LOOP")
-                    label_img2 = arithm.multiplyScalarImg(split_mask_filter_Label16, 1)
-                    # ui.displayImg(label_img2, pause=True, title=f"{label} label_img2 ON LOOP")
-                    nbLabels = glbmsr.statsMsr2d(label_img2).max
-                    img_threshold = bin.thresholdImg(label_img2, 1.0, nbLabels+1)
-                    # ui.displayImg(img_threshold, pause=True, title=f"{label} img_threshold ON LOOP {nbLabels}")
-                    img_split_labels = advmorpho.watershedBinarySeparation2dImg(img_threshold, 4, PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                    if self.model_name_classification and label.lower() in ["lesion"]:
+                        # ui.displayImg(split_mask_separated_filter, pause=True, title="split_mask_filter_label on
+                        # LEAF")
+                        img3 = ui.applySmartClassification(split_mask_separated_filter, ipsdk_img,
+                                                           Path(vrb.folderShapeClassification).joinpath(
+                                                               f"{self.model_name_classification}").as_posix())
+                        # ui.displayImg(img3, pause=True, title="img3 on LEAF")
+                        split_mask_filter = bin.thresholdImg(img3, 1.0, 1.0)
+                        # ui.displayImg(split_mask_filter, pause=True, title="split_mask_filter on LEAF")
+                    # use to generate on overlay image with opverlay function
+                    split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
+                    label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i - 1)
+                    self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
+                    # ui.displayImg(self.image_label_blend, pause=True, title=f"{label}image_label_blend ON LOOP")
+
+                    # use to save an IPSDK image labels splited
+                    # TODO use watershedBinarySeparation2dImg or adaptiveBinaryWatershed2dImg
+                    # img_split_labels = advmorpho.watershedBinarySeparation2dImg(split_mask_separated_filter, 4,
+                    # PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                    split_mask_separated_filter = advmorpho.adaptiveBinaryWatershed2dImg(split_mask_filter, 0.5,
+                                                                                         PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
                     # ui.displayImg(img_split_labels, pause=True, title=f"{label}img_split_labels ON LOOP")
-                    self.image_ipsdk_blend = arithm.addImgImg(self.image_ipsdk_blend, img_split_labels)
+                    self.image_ipsdk_blend = arithm.addImgImg(self.image_ipsdk_blend, split_mask_separated_filter)
                     # ui.displayImg(self.image_ipsdk_blend, pause=True, title=f"{label}image_ipsdk_blend ON LOOP")
 
                 # check if mask is empty after remove small elements
-                nbLabels = glbmsr.statsMsr2d(split_mask_filter).max
+                nbLabels = glbmsr.statsMsr2d(split_mask_separated_filter).max
                 if nbLabels > 0:
-                    # build calibration measure set
-                    calibration = PyIPSDK.createGeometricCalibration2d(1, calibration_value, 'cm')
+                    if split_mask_separated_filter.hasGeometricCalibration():
+                        calibration = split_mask_separated_filter.getGeometricCalibration()
+                    else:
+                        calibration = PyIPSDK.createGeometricCalibration2d(calibration_obj.dico_info["value"], calibration_obj.dico_info["value"], calibration_obj.dico_info["unit"])
+
                     inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
                     PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Area2dMsr",
                                               shapeanalysis.createHolesBasicPolicyMsrParams(False))
@@ -1139,13 +1255,11 @@ class Leaf:
                     # ui.displayImg(split_mask_separated_filter, pause=True)
                     # convert to panda dataframe
                     df = outset_to_df(outMeasureSet1)
-                    if "lesion" in label.lower():
-                        label = "lesion"
                     df.insert(0, "Class", label)
                     df.insert(0, "leaf_ID", self.leaf_id)
                     self.dico_frames_separated[f"{label}-{self.leaf_id}"] = df
         self.image_ipsdk_blend = util.convertImg(self.image_ipsdk_blend, PyIPSDK.eImageBufferType.eIBT_Label16)
-        # ui.displayImg(self.image_ipsdk_blend, pause=True, title="image_label_blend on LEAF")
+        # ui.displayImg(self.image_ipsdk_blend, pause=True, title="image_ipsdk_blend on LEAF")
 
 
 class LeAFtool:
@@ -1372,7 +1486,8 @@ class LeAFtool:
             self.__check_dir(section="DRAWCROP", key="images_path")
             self.__check_dir(section="DRAWCROP", key="out_draw_dir", makedir=True)
             self.__get_allow_extension(section="DRAWCROP", key="extension")
-            self.crop_obj = CropAndCutImages(scan_folder=self.config["DRAWCROP"]["images_path"],
+            self.crop_obj = CropAndCutImages(scan_folder=self.get_config_value(section="DRAWCROP", key="images_path"),
+                                             rename=self.get_config_value(section="rename"),
                                              extension=self.get_config_value(section="DRAWCROP", key="extension"),
                                              x_pieces=self.get_config_value(section="DRAWCROP", key="x_pieces"),
                                              y_pieces=self.get_config_value(section="DRAWCROP", key="y_pieces"),
@@ -1386,24 +1501,25 @@ class LeAFtool:
                                                                                 key="noise_remove")),
                                              numbering=self.get_config_value(section="DRAWCROP", key="numbering"),
                                              plant_model=self.plant_model,
-            force_rerun = self.__var_2_bool("DRAWCROP", "force_rerun",
-                                             to_convert=self.get_config_value(
-                                                 section="DRAWCROP",
-                                                 key="force_rerun")),
-            )
+                                             force_rerun=self.__var_2_bool("DRAWCROP", "force_rerun",
+                                                                           to_convert=self.get_config_value(
+                                                                               section="DRAWCROP", key="force_rerun")),
+                                             )
             if self.config["RUNSTEP"]["draw"]:
                 self.crop_obj.loop_draw(draw_dir_name=self.get_config_value(section="DRAWCROP", key="out_draw_dir"))
             if self.config["RUNSTEP"]["crop"]:
                 self.crop_obj.loop_crop(cutdir_name=self.get_config_value(section="DRAWCROP", key="out_cut_dir"),
-                                        csv_file=self.get_config_value(section="DRAWCROP", key="csv_file")
+                                        csv_file=self.get_config_value(section="csv_file")
                                         )
-        self.logger.debug(f"{self.crop_obj.exit_status}")
-        if ("ML" in self.tools or "merge" in self.tools) and (self.crop_obj and self.crop_obj.exit_status):
+        if ("ML" in self.tools or "merge" in self.tools) and (
+                not self.crop_obj or (self.crop_obj and self.crop_obj.exit_status)):
             self.__check_dir(section="ML", key="images_path")
             self.analysis = AnalysisImages(scan_folder=self.get_config_value(section="ML", key="images_path"),
                                            model_name=self.get_config_value(section="ML", key="model_name"),
-                                           calibration_value=self.get_config_value(section="ML",
-                                                                                   key="calibration_value"),
+                                           csv_file=self.get_config_value(section="csv_file"),
+                                           rename=self.get_config_value(section="rename"),
+                                           calibration_name=self.get_config_value(section="ML",
+                                                                                  key="calibration_name"),
                                            small_object=self.get_config_value(section="ML", key="small_object"),
                                            alpha=self.get_config_value(section="ML", key="alpha"),
                                            border=self.get_config_value(section="ML", key="leaf_border"),
@@ -1411,15 +1527,17 @@ class LeAFtool:
                                                                           to_convert=self.get_config_value(section="ML",
                                                                                                            key="noise_remove")),
                                            force_rerun=self.__var_2_bool("ML", "force_rerun",
-                                                                   to_convert=self.get_config_value(section="ML",
-                                                                                                    key="force_rerun")),
+                                                                         to_convert=self.get_config_value(section="ML",
+                                                                                                          key="force_rerun")),
                                            draw_ML_image=self.__var_2_bool("ML", "draw_ML_image",
                                                                            to_convert=self.get_config_value(
                                                                                section="ML", key="draw_ML_image")),
                                            split_ML=self.__var_2_bool("ML", "split_ML",
                                                                       to_convert=self.get_config_value(section="ML",
                                                                                                        key="split_ML")),
-                                           plant_model=self.plant_model
+                                           plant_model=self.plant_model,
+                                           model_name_classification=self.get_config_value(section="ML",
+                                                                                           key="model_name_classification")
                                            )
             if self.config["RUNSTEP"]["ML"]:
                 self.analysis.run_ML()
@@ -1438,6 +1556,89 @@ class LeAFtool:
 # CODE RUN
 #####################################################
 version = "0.0.1"
+
+
+def sort_human(in_list, _nsre=None):
+    """
+    Sort a :class:`list` with alpha/digit on the way that humans expect,\n
+    use list.sort(key=sort_human) or\n
+    sorted(list, key=sort_human)).
+
+    Arguments:
+        in_list (:obj:`list`): a python :class:`list`
+        _nsre (:obj:`re.compil`, optional): re expression use for compare , defaults re.compile('([0-9]+)'
+
+    Returns:
+        list: sorted with human sort number
+
+    Example:
+        >>> list_to_sorted = ["something1","something32","something17","something2","something29","something24"]
+        >>> print(sorted(list_to_sorted, key=sort_human))
+        ['something1', 'something2', 'something17', 'something24', 'something29', 'something32']
+        >>> list_to_sorted.sort(key=sort_human)
+        >>> print(list_to_sorted)
+        ['something1', 'something2', 'something17', 'something24', 'something29', 'something32']
+
+    """
+    from warnings import warn
+    import re
+    if not _nsre:
+        _nsre = re.compile('([0-9]+)')
+    try:
+        return [int(text) if text.isdigit() else f"{text}".lower() for text in re.split(_nsre, in_list)]
+    except TypeError:
+        if not isinstance(in_list, int):
+            warn(
+                f"Yoda_powers::sort_human : element '{in_list}' on the list not understand so don't sort this "
+                f"element\n",
+                SyntaxWarning, stacklevel=2)
+            return in_list
+
+
+def compare_list(list1, list2):
+    """
+    Function to compare two list and return common, uniq1 and uniq2
+
+    Arguments:
+        list1 (list): the first python :class:`list`
+        list2 (list): the second python :class:`list`
+
+    Returns:
+        list: common, u1, u2
+        common: the common elements of the 2 list,
+        u1: uniq to list1,
+        u2: uniq to list2
+
+    Notes:
+        ens1 = set([1, 2, 3, 4, 5, 6])\n
+        ens2 = set([2, 3, 4])\n
+        ens3 = set([6, 7, 8, 9])\n
+        print(ens1 & ens2) set([2, 3, 4]) car ce sont les seuls à être en même temps dans ens1 et ens2\n
+        print(ens1 | ens3) set([1, 2, 3, 4, 5, 6, 7, 8, 9]), les deux réunis\n
+        print(ens1 & ens3) set([6]), même raison que deux lignes au dessus\n
+        print(ens1 ^ ens3) set([1, 2, 3, 4, 5, 7, 8, 9]), l'union moins les éléments communs\n
+        print(ens1 - ens2) set([1, 5, 6]), on enlève les éléments de ens2
+
+    Examples:
+        >>> l1 = [1, 2, 3, 4, 5, 6]
+        >>> l2 = [6, 7, 8, 9]
+        >>> com, u1, u2 = compare_list(l1, l2)
+        >>> print(com)
+        [6]
+        >>> print(u1)
+        [1, 2, 3, 4, 5]
+        >>> print(u2)
+        [7, 8, 9]
+
+    """
+    list1 = [Path(elm).name for elm in list1]
+    list2 = [Path(elm).name.replace('_mask_overlay', "") for elm in list2]
+    ens1 = set(list1)
+    ens2 = set(list2)
+    common = list(ens1 & ens2)
+    uniq1 = list(ens1 - ens2)
+    uniq2 = list(ens2 - ens1)
+    return sorted(common, key=sort_human), sorted(uniq1, key=sort_human), sorted(uniq2, key=sort_human)
 
 
 def existent_file(path):

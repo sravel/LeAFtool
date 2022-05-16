@@ -1,59 +1,41 @@
-# path to write log files
-log_path:
-debug: False
+log_path: /home/sebastien/Documents/IPSDK/IMAGE/thomas/
+debug: true
 PLANT_MODEL: banana
-###############################
-# activate / deactivate workflow steps
+csv_file: /home/sebastien/Documents/IPSDK/IMAGE/thomas/IPSDK_inocTHOMAS_Rep1.csv
+rename:
+- projet
+- position
 RUNSTEP:
-    draw: True                 # draw the cuts and margin lines
-    crop: True                 # cuts and remove margin
-    ML: True                    # apply ML on folder
-    merge: True                 # merge original image and overlay image
-
-###############################
-# If 'draw' or 'crop' activate
+    draw: true
+    crop: true
+    ML: true
+    merge: true
 DRAWCROP:
-    images_path:
-    out_cut_dir:
-    out_draw_dir:
-    extension:                   # file extension for loop
-    x_pieces: 2                  # the number of pieces cut vertically
-    y_pieces: 3                  # the number of pieces cut horizontally
-    top: 80                       # The crop margin top
-    left: 80                      # The crop margin left
-    right: 80                     # The crop margin right
-    bottom: 80                    # The crop margin bottom
-    noise_remove: True          # Use IPSDK unionLinearOpening2dImg function with param 3 pixels to remove small white points
-    # path to CSV file for rename cut image
-    csv_file:
-    numbering: bottom             # the order position [right or bottom] cf enf of file
-    force_rerun: True
-
-###############################
-# If 'ML' activate
+    images_path: /home/sebastien/Documents/IPSDK/IMAGE/thomas
+    out_cut_dir: /home/sebastien/Documents/IPSDK/IMAGE/thomas/crop
+    out_draw_dir: /home/sebastien/Documents/IPSDK/IMAGE/thomas/draw
+    extension: tif
+    x_pieces: 2
+    y_pieces: 3
+    top: 80
+    left: 120
+    right: 120
+    bottom: 80
+    noise_remove: false
+    numbering: Bottom
+    force_rerun: false
 ML:
-    images_path:
-    model_name:                 # The name of model
-    split_ML: false             # The methode to find leaves on scan if true use ML else PCA on RGB
-    calibration_value: 1.0      # The cm calibration for 1px
-    small_object: 100           # The minimum area of class, to remove small noise detect object
-    alpha: 0.5                  # The degree of transparency of overlay color label. Must float 0 <= alpha <= 1
-    leaf_border: 80             # The diameter of the brush (in pixels) used to erode the leaf
-    noise_remove: False          # Use IPSDK unionLinearOpening2dImg function with param 3 pixels to remove small white points
-    force_rerun: True                 # If True, rerun all images, else only not run
-    draw_ML_image: True         # If True, add rectangle overlay corresponding to image use for apply ML
+    images_path: /home/sebastien/Documents/IPSDK/IMAGE/thomas/crop
+    model_name: test_thomas
+    model_name_classification: banana_trips
+    split_ML: false
+    calibration_name: banana
+    small_object: 40
+    alpha: 0.5
+    leaf_border: 80
+    noise_remove: false
+    force_rerun: true
+    draw_ML_image: true
 MERGE:
-    rm_original: False           # remove original and overlay, WARNING rollback is not able
-    extension: jpg               # the merge image format
-
-
-##############################
-# For numbering option:
-# if right image number like:
-# 1  2
-# 3  4
-# 5  6
-# if bottom image number like:
-# 1  4
-# 2  5
-# 3  6
+    rm_original: true
+    extension: jpg
