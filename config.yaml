@@ -6,7 +6,7 @@ rename:
 - projet
 - position
 RUNSTEP:
-    draw: true
+    draw: false
     crop: true
     ML: true
     merge: true
@@ -29,9 +29,9 @@ ML:
     model_name: test_thomas
     model_name_classification: banana_trips
     split_ML: false
-    calibration_name: banana
-    small_object: 40
-    alpha: 0.5
+    calibration_name:
+    small_object: 30
+    alpha: 0.8
     leaf_border: 80
     noise_remove: false
     force_rerun: true

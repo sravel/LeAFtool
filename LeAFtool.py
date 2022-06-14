@@ -1,7 +1,7 @@
 import logging.config
 import sys
 from pathlib import Path
-from PyQt5.QtCore import Qt, QCoreApplication
+from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
 from PyQt5 import QtGui, Qsci
 import PyQt5.QtWidgets as qt
 from PyQt5.QtGui import QIcon
@@ -195,7 +195,7 @@ class ToolsActivation(qt.QGroupBox):
         self.ml_checkbox.stateChanged.connect(self.update_activation_tools)
         self.merge_checkbox.stateChanged.connect(self.update_activation_tools)
         self.plant_model.currentIndexChanged.connect(self.update_activation_tools)
-        self.csv_file.lineEditFile.editingFinished.connect(self.update_activation_tools)
+        self.csv_file.lineEditFile.textChanged.connect(self.update_activation_tools)
         # self.list_selection.mInput.itemSelectionChanged.connect(self.update_activation_tools)
         # self.list_selection.mOuput.itemSelectionChanged.connect(self.update_activation_tools)
         self.list_selection.mBtnMoveToAvailable.clicked.connect(self.update_activation_tools)
@@ -224,6 +224,7 @@ class ToolsActivation(qt.QGroupBox):
         self.ml_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["ML"]))
         self.merge_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["merge"]))
         self.csv_file.lineEditFile.setText(self.parent.dict_for_yaml["csv_file"])
+        self.list_selection.clean_list()
         self.list_selection.add_right_elements(self.parent.dict_for_yaml["rename"])
         self.loading = False
 
@@ -257,7 +258,7 @@ class ToolsActivation(qt.QGroupBox):
                 # self.csv_file.setVisible(self.parent.layer_tools.ml_checkbox.isChecked())
 
     def update_header_csv(self):
-        if self.parent.dict_for_yaml["csv_file"]:
+        if self.parent.dict_for_yaml["csv_file"] and Path(self.parent.dict_for_yaml["csv_file"]).exists():
             header_txt = Path(self.parent.dict_for_yaml["csv_file"]).open("r").readline().strip()
             sep_dict = {",": header_txt.count(","),
                         ";": header_txt.count(";"),
@@ -445,6 +446,10 @@ class RunLeAFtool(qt.QWidget):
         # print(f"{'#'*15}\ndict_backup\n{'#'*15}\n{self.dict_backup}")
         self.upload_all()
 
+    @pyqtSlot("QWidget*", "QWidget*")
+    def on_focus_changed(self):
+        self.update_all()
+
     def update_all(self):
 
         self.layer_tools.update_activation_tools()
@@ -549,11 +554,13 @@ class MainInterface(qt.QWidget):
         # self.layout.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
         self.setLayout(self.layout)
         self.setContentsMargins(5, 5, 5, 5)
+        self.setAutoFillBackground(True)
         # windows size
         # self.setMinimumWidth(int(1920))
         self.setMaximumSize(int(1800), int(900))
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
+
 
         # Add title and logo
         self.setWindowTitle("LeAFtool")
@@ -571,14 +578,31 @@ class MainInterface(qt.QWidget):
         self.tabs.setTabPosition(qt.QTabWidget.West)
         self.tab1 = RunLeAFtool()
         #
-        if self.tab1.leaftool:
-            csv_file = self.tab1.leaftool.analysis.csv_path_merge
-            path_images = self.tab1.layer_ml_merge.images_path
-        path_images = "/home/sebastien/Documents/IPSDK/IMAGE/thomas/crop/"
-        csv_file = "/home/sebastien/Documents/IPSDK/IMAGE/thomas/crop/global-merge.csv"
-        df = pd.read_csv(csv_file, index_col=None, header=[0], sep="\t")
-        ddict = df.to_dict(orient='list')
-        self.tab2 = TableWidget(ddict, path_images=path_images)
+        # if self.tab1.leaftool:
+        #     csv_file = self.tab1.leaftool.analysis.csv_path_merge
+        #     path_images = self.tab1.layer_ml_merge.images_path
+        #     print(csv_file)
+        #     print(path_images)
+        self.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
+
+        self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
+        not_resize = self.csv_file.sizePolicy()
+        not_resize.setRetainSizeWhenHidden(True)
+        self.csv_file.setSizePolicy(not_resize)
+
+        self.table_final = TableWidget()
+        # Layout Style
+        table_group = qt.QGroupBox()
+        table_group.setTitle("Merge Results")
+        table_group.setStyleSheet(style)
+        table_group.layout = qt.QVBoxLayout()
+        table_group.layout.setContentsMargins(5, 5, 5, 5)
+        table_group.setLayout(table_group.layout)
+        table_group.layout.addWidget(self.csv_file)
+        table_group.layout.addWidget(self.table_final)
+        self.layout.addWidget(table_group, 0, 3, Qt.AlignLeft)
+
+        self.tab2 = table_group
 
         # Add tabs
         self.tabs.addTab(self.tab1, "Run LeAFtool")
@@ -586,6 +610,15 @@ class MainInterface(qt.QWidget):
         self.layout.addWidget(self.logo_label, 0, 0, Qt.AlignCenter)
         self.layout.addWidget(self.tabs, 1, 0, Qt.AlignLeft)
 
+        self.csv_file.lineEditFile.textChanged.connect(self.update_table)
+
+    def update_table(self):
+        csv_file = self.csv_file.lineEditFile.text()
+        if csv_file and Path(csv_file).exists():
+            path_images = Path(csv_file).parent
+            df = pd.read_csv(csv_file, index_col=None, header=[0], sep="\t")
+            ddict = df.to_dict(orient='list')
+            self.table_final.loadDictionary(ddict,path_images)
 
 # class DataExplorer(qt.QWidget):
 #     def __init__(self, parent):

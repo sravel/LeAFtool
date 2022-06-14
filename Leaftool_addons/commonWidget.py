@@ -5,6 +5,7 @@ import PyQt5.QtWidgets as qt
 from PyQt5 import QtGui, QtCore
 from pathlib import Path
 import pandas as pd
+import re
 
 sys.path.insert(0, Path("../").as_posix())
 
@@ -106,28 +107,22 @@ class FileSelectorLeaftool(qt.QGroupBox):
         # dlg.setOption(dlg.HideNameFilterDetails, False)
         # dlg.setFilter(dlg.filter() | QDir.Hidden)
         defaultFolder = return_default_folder()
-        print(defaultFolder)
         if self.is_file:
             filename = qt.QFileDialog.getOpenFileName(self, caption="Select your file",
                                            directory=defaultFolder,
                                            filter="table file (*.csv *.tsv)")
                                            # options=qt.QFileDialog.DontUseNativeDialog)
-            print(f"filelist: {filename}")
             filename = filename[0]
-            print(f"filename: {filename}")
         else:
             dlg.setOption(dlg.ShowDirsOnly, True)
             dlg.setFileMode(dlg.Directory)
             filename = dlg.getExistingDirectory(dlg, caption="Select your folder",
                                                 directory=defaultFolder)
-            print(f"FOLDER: {filename}")
 
-        print(f"FILE OR FOLDER: {filename}")
         if filename != "" and filename:
             try:
                 self.lineEditFile.setText(filename)
                 self.lineEditFile.setFocus()
-                print(f"ON TRY: {filename}")
                 Dfct.SubElement(vrb.userPathElement, "ImportImages").text = os.path.dirname(filename)
                 Dfct.saveXmlElement(vrb.userPathElement, vrb.folderInformation + "/UserPath.mho", forceSave=True)
             except:
@@ -160,7 +155,7 @@ class NumberLineEditLabel(qt.QGroupBox):
 
 def randomPastelColor(i):
     # colors = [171, 54, 114, 5, 231, 187, 254, 7, 214, 192, 50, 258, 48, 56, 107, 255, 33, 34, 177, 246]
-    colors = [10, 30, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 255, 33, 34, 177, 246]
+    colors = [10, 30, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 255, 33, 34, 177, 246, 171, 54, 114, 5, 231, 187, 254, 7, 214, 192, 50, 258, 48, 56, 107, 255, 33, 34, 177, 246]
     s = 90
     l = 90
     return QtGui.QColor.fromHsl(colors[i], int(s * 255 / 100), int(l * 255 / 100), 100)
@@ -171,26 +166,32 @@ class TableWidget(qt.QTableWidget):
         super(TableWidget, self).__init__()
 
         self.ddict = ddict
+        self.indice_crop_name = None
+        self.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
         self.path_images = path_images
 
         self.horizontalHeader().setVisible(True)
         self.verticalHeader().setVisible(False)
         # self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setSortingEnabled(True)
-        self.loadDictionary()
+        # self.loadDictionary()
         # self.setMaximumHeight(self.rowHeight(0) * self.rowCount() + self.horizontalScrollBar().height())
         self.horizontalHeader().setStretchLastSection(True)
         self.setAlternatingRowColors(True)
-        self.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Maximum)
+        # self.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Maximum)
 
         self.itemPressed.connect(self.cellClick)
         self.display()
 
-    def loadDictionary(self):
+    def loadDictionary(self, ddict, path_images):
         try:
+            self.ddict = ddict
+            self.path_images = path_images
             self.setColumnCount(len(self.ddict))
             col = 0
-            for name in self.ddict:
+            for indice, name in enumerate(self.ddict):
+                if name == "crop_name":
+                    self.indice_crop_name = indice
                 self.setRowCount(len(self.ddict[name]))
                 cell = qt.QTableWidgetItem(name)
                 self.setHorizontalHeaderItem(col, cell)
@@ -224,22 +225,26 @@ class TableWidget(qt.QTableWidget):
             self.window().activateWindow()
 
     def cellClick(self, cellItem):
+        vrb.mainWindow.widgetLabelImage.clearAll()
 
         rowValue, columnValue = cellItem.row(), cellItem.column()
-        text = self.item(rowValue,
-                         7).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a
-        # cliqué
+        text = self.item(rowValue, self.indice_crop_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
+
+        def glob_re(pattern, strings):
+            return filter(re.compile(pattern).match, strings)
 
         if vrb.mainWindow:
             try:
-                nameImageInput = f"{self.path_images}{text}.tif"
+                nameImageInput = f"{self.path_images}/{text}.tif"
                 imageInput = PyIPSDK.loadTiffImageFile(nameImageInput)
 
-                nameImageOverlay = f"{self.path_images}{text}_overlay_ipsdk.tif"
-                imageOverlay = PyIPSDK.loadTiffImageFile(nameImageOverlay)
+                vrb.mainWindow.widgetLabelImage.addNewImage(text, imageInput)
 
-                vrb.mainWindow.widgetLabelImage.addNewImage("Image", imageInput)
-                vrb.mainWindow.widgetLabelImage.addNewImage("Result", imageOverlay)
+                all_overlay_path = [Path(self.path_images).joinpath(path) for path in glob_re(fr'{text}.*_overlay_ipsdk\.tif$', os.listdir(self.path_images))]
+                for file in all_overlay_path:
+                    label = file.stem.split("_")[-3]
+                    image = PyIPSDK.loadTiffImageFile(file.as_posix())
+                    vrb.mainWindow.widgetLabelImage.addNewImage(f"Result_{label}", image)
 
                 for num in range(
                         vrb.mainWindow.widgetLabelImage.layout.count()):  # Boucle pour afficher l'image "Image" et
@@ -248,10 +253,10 @@ class TableWidget(qt.QTableWidget):
                         item = vrb.mainWindow.widgetLabelImage.layout.itemAt(num)
                         if item is not None:
                             label = item.widget()
-                            if label.name == "Image":
+                            if label.name == text:
                                 vrb.mainWindow.changeCurrentXmlElement(label)
                                 vrb.mainWindow.widgetImage.groupBoxOverlay.checkBoxOverlay.setChecked(True)
-                                vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText("Result")
+                                vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText("Result_lesion")
                     except:
                         pass
 

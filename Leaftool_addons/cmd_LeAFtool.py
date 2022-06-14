@@ -231,7 +231,7 @@ class MetaInfo:
         if not self.rename_to_df:
             for scan_name, pos in self.__dict_names_pos:
                 df = self.dataframe.query(f'{self.header[0]}=="{scan_name}" & {self.header[1]}=={pos}').copy(deep=True)
-                rename = "_".join([str(df[elm].values[0]) for elm in self.rename_order])
+                rename = "_".join([str(df[elm].values[0]).replace("/", "-") for elm in self.rename_order])
                 df["crop_name"] = rename
                 self.__dict_names_pos[(scan_name, pos)].update({"crop_name": rename})
                 self.rename_to_df[rename] = df.reset_index(drop=True)
@@ -243,6 +243,7 @@ class MetaInfo:
 
     def check_correspondingML(self, files_list):
         """test if all scan file have name on csv file"""
+        # TODO: add test
         pass
         # try:
         # not_found_list = []
@@ -537,19 +538,22 @@ class AnalysisImages:
         self.full_files = []
         self.mask_overlay_files = []
         self.files_to_run = []
-        self.csv_list = []
+        self.csv_dict_list = {}
         self.table_leaves = []
         self.draw_ML_image = draw_ML_image
         self.model_name_classification = model_name_classification
 
         # TODO add csv_path_merge to user argument ?
-        self.csv_path_merge = self.basedir.joinpath("global-merge.csv").as_posix()
+        self.csv_path_merge = self.basedir.joinpath("global-merge-ALL.csv").as_posix()
         self.__check_inputs()
         # If model exist load for all images
         self.model_load = PyIPSDK.readRandomForestModel(self.model_path)
 
         # get class on machine learning model
         self.model_to_label_dict = self.__model_to_label_dict()
+        self.model_classification_to_label_dict = self.__model_classification_to_label_dict()
+        self.all_ml_labels = set(
+            list(self.model_to_label_dict.keys()) + list(self.model_classification_to_label_dict.keys()))
         self.__build_already_run_list()
 
     @staticmethod
@@ -580,13 +584,34 @@ class AnalysisImages:
         self.__validate_number(key="border_leaf", value=self.border_leaf, type_value=int, min_value=0, max_value=1000)
         self.__validate_number(key="alpha", value=self.alpha, type_value=float, min_value=0, max_value=1)
 
+    def __model_classification_to_label_dict(self):
+        """retrieve the name of the machine learning model labels"""
+        dict_label = {}
+        mho_path = Path(vrb.folderShapeClassification).joinpath(f"{self.model_name_classification}/Settings.mho")
+        if mho_path.exists():
+            file = xmlet.parse(mho_path.as_posix())
+            xmlElement = file.getroot()
+            label_classes_element = Dfct.SubElement(xmlElement, "LabelClasses")
+            nb_label = int(Dfct.SubElement(label_classes_element, "NumberLabels").text)
+            for numLabel in range(nb_label):
+                label_element = Dfct.SubElement(label_classes_element, "Label_" + str(numLabel))
+                color_element = Dfct.SubElement(label_element, "Color").text
+                name_element = Dfct.SubElement(label_element, "Name").text
+                try:
+                    name_element = Dfct.convertTextFromAscii(name_element).lower()
+                except:
+                    pass
+                dict_label[name_element] = {"color": [int(elm) for elm in color_element.split(',')],
+                                            "value": int(numLabel)}
+        return dict_label
+
     def __model_to_label_dict(self):
         """retrieve the name of the machine learning model labels"""
         dict_label = {}
         mho_path = Path(vrb.folderPixelClassification).joinpath(f"{self.model_name}/Settings.mho").as_posix()
         file = xmlet.parse(mho_path)
-        self.xmlElement = file.getroot()
-        label_classes_element = Dfct.SubElement(self.xmlElement, "LabelClasses")
+        xmlElement = file.getroot()
+        label_classes_element = Dfct.SubElement(xmlElement, "LabelClasses")
         nb_label = int(Dfct.SubElement(label_classes_element, "NumberLabels").text)
         for numLabel in range(nb_label):
             label_element = Dfct.SubElement(label_classes_element, "Label_" + str(numLabel))
@@ -631,9 +656,9 @@ class AnalysisImages:
         mask_overlay_files_filter_set = set(
             sorted(f"{path.stem.replace('_mask_overlay', '')}" for path in self.mask_overlay_files))
 
-        self.csv_list = [self.basedir.joinpath(path).as_posix() for path in
-                         glob_re(r'.*_merge-lesion\.csv$', os.listdir(self.basedir.as_posix()))]
-
+        for label in self.all_ml_labels:
+            self.csv_dict_list[label] = [self.basedir.joinpath(path).as_posix() for path in
+                                         glob_re(fr'.*{label}_merge-lesion\.csv$', os.listdir(self.basedir.as_posix()))]
         basename_files_to_run = list(full_files_set - mask_overlay_files_filter_set)
         if self.force_rerun:
             self.files_to_run = self.full_files
@@ -661,14 +686,27 @@ class AnalysisImages:
             sep: CSV output separator
             rm_merge: if True, remove intermediate csv files Default: False
         """
-        df_list = (pd.read_csv(f, sep=sep) for f in self.csv_list)
-        df = pd.concat(df_list, ignore_index=True).fillna(0)
-        df.sort_values(["scan_name", "position"], ascending=(True, True), inplace=True)
+        all_merge = []
+        for label in self.all_ml_labels:
+            if len(self.csv_dict_list[label]) > 1:
+                df_list = (pd.read_csv(f, sep=sep) for f in self.csv_dict_list[label])
+                df_merge = pd.concat(df_list, ignore_index=True, axis=0,).fillna(0)
+                df_merge.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True), inplace=True)
+                all_merge.append(df_merge)
+                csv_path_file = self.basedir.joinpath(f"global-merge-{label}.csv").as_posix()
+                with open(csv_path_file, "w") as libsizeFile:
+                    df_merge.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
+                if rm_merge:
+                    for file in self.csv_dict_list[label]:
+                        Path(file).unlink(missing_ok=True)
+        all_merge_df = all_merge[0]
+        for df_ in all_merge[1:]:
+            all_merge_df = all_merge_df.merge(df_, on=self.meta_info.header+["crop_name", "leaf_ID", f"leaf_Area_{self.calibration_obj.dico_info['unit']}"])
+
+        # all_merge_df = pd.concat(all_merge, ignore_index=True, axis=1, join="inner")#.fillna(0)
+        all_merge_df.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True), inplace=True)
         with open(self.csv_path_merge, "w") as libsizeFile:
-            df.to_csv(libsizeFile, index=False, sep=sep, float_format='%.2f')
-        if rm_merge:
-            for file in self.csv_list:
-                Path(file).unlink(missing_ok=True)
+            all_merge_df.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
 
     def analyse_leaves(self, image_path):
         # extract path/name from image path
@@ -713,23 +751,32 @@ class AnalysisImages:
                 self.logger.info(f" - Read and extract lesion on leaf {leaf.leaf_id}/{len(self.table_leaves)}")
                 leaf.analysis(model_load=self.model_load,
                               model_to_label_dict=self.model_to_label_dict,
+                              model_classification_to_label_dict=self.model_classification_to_label_dict,
                               small_object=self.small_object,
                               calibration_obj=self.calibration_obj,
                               model_name_classification=self.model_name_classification)
                 dict_frames_separated_leaves.update(leaf.dico_frames_separated)
 
                 # add leaf mask to full leaves overlay
-                # ui.displayImg(overlayImagefilterIPSDK, pause=True, title="overlayImagefilterIPSDK")
-                # ui.displayImg(leaf.image_ipsdk_blend, pause=True, title="image_ipsdk_blend")
-                # ui.displayImg(leaf.image_label_blend, pause=True, title="image_label_blend")
                 util.putROI2dImg(overlayImagefilter, leaf.image_label_blend, leaf.x_position, leaf.y_position,
                                  overlayImagefilter)
-                util.putROI2dImg(overlayImagefilterIPSDK, leaf.image_ipsdk_blend, leaf.x_position, leaf.y_position,
-                                 overlayImagefilterIPSDK)
-                # ui.displayImg(overlayImagefilterIPSDK, pause=True)
-                PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_overlay_ipsdk.tif").as_posix(),
-                                          overlayImagefilterIPSDK)
-            # build all csv tables
+
+                # loop for all label to extract IPSDK label image:
+                # print(leaf.image_ipsdk_blend_dict_class.items())
+                for label, img in leaf.image_ipsdk_blend_dict_class.items():
+                    util.eraseImg(overlayImagefilterIPSDK, 0)
+                    util.putROI2dImg(overlayImagefilterIPSDK, img, leaf.x_position, leaf.y_position,
+                                     overlayImagefilterIPSDK)
+                    # ui.displayImg(overlayImagefilterIPSDK, pause=True)
+                    PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_{label}_overlay_ipsdk.tif").as_posix(),
+                                              overlayImagefilterIPSDK)
+
+            #     util.putROI2dImg(overlayImagefilterIPSDK, leaf.image_ipsdk_blend, leaf.x_position, leaf.y_position,
+            #                      overlayImagefilterIPSDK)
+            #     # ui.displayImg(overlayImagefilterIPSDK, pause=True)
+            #     PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_overlay_ipsdk.tif").as_posix(),
+            #                               overlayImagefilterIPSDK)
+            # # build all csv tables
             result_separated = pd.concat(dict_frames_separated_leaves.values(),
                                          keys=dict_frames_separated_leaves.keys(), ignore_index=True)
 
@@ -813,7 +860,6 @@ class AnalysisImages:
 
     @staticmethod
     def __drawRectangle(image, x, y, w, h, e, color):
-
         image.array[0, y - e:y + e, x - e:x + w + e] = color[0]
         image.array[1, y - e:y + e, x - e:x + w + e] = color[1]
         image.array[2, y - e:y + e, x - e:x + w + e] = color[2]
@@ -833,7 +879,7 @@ class AnalysisImages:
     def __append_col_df(self, basename, df):
         # print(f"APPEND DF {basename} {df}")
         df.insert(0, "crop_name", basename)
-        df_merge = pd.merge(self.meta_info.dataframe_with_crop_name, df, on="crop_name")
+        df_merge = pd.merge(self.meta_info.dataframe_with_crop_name, df, on="crop_name")#,how="outer")
         return df_merge
 
     def __build_df_split(self, basename, result_separated=None):
@@ -842,104 +888,70 @@ class AnalysisImages:
         # save results to csv format
         csv_path_file = self.basedir.joinpath(f"{basename}_split-info.csv").as_posix()
         # print(f"CSV SAVE AT {csv_path_file}")
-        result_separated.to_csv(csv_path_file, index=False, sep="\t", float_format='%.2f')
+        result_separated.to_csv(csv_path_file, index=False, sep="\t", float_format='%.6f')
 
     def __build_df_merge(self, basename, result_separated):
         # merge all lesion by leaves
         leaves = result_separated[result_separated['Class'] == 'leaf']['leaf_ID']
-        df_by_leaves = []
         for leaf_id in leaves:
             cond1 = result_separated['Class'] == 'leaf'
             cond2 = result_separated['leaf_ID'] == int(leaf_id)
-            area_leaf_px2 = result_separated[cond1 & cond2]['Number of pixels'].values[0]
-            area_leaf_cm2 = result_separated[cond1 & cond2].filter(regex='Area').values[0][0]
+            # area_leaf_px2 = result_separated[cond1 & cond2]['Number of pixels'].values[0]
+            area_leaf = result_separated[cond1 & cond2].filter(regex='Area').values[0][0]
+            for label in self.all_ml_labels:
+                df_by_leaves = []
+                dftmp = pd.DataFrame()
+                if label in result_separated['Class'].unique() and label.lower() not in ["leaf"]:
+                    cond3 = result_separated['Class'] == label
+                    # area_lesion_px2 = result_separated[cond2 & cond3].filter(regex='Number of pixels')
+                    area_lesion_cm2 = result_separated[cond2 & cond3].filter(regex='Area')
+                    nb_lesion = len(area_lesion_cm2)
+                    area_lesion_sum = area_lesion_cm2.sum().values[0]
+                    area_lesion_median = area_lesion_cm2.median().values[0]
+                    area_lesion_mean = area_lesion_cm2.mean().values[0]
+                    area_lesion_std = area_lesion_cm2.std().values[0]
+                    area_lesion_min = area_lesion_cm2.min().values[0]
+                    area_lesion_max = area_lesion_cm2.max().values[0]
+                    percent_lesion = (area_lesion_sum / area_leaf) * 100
 
-            cond3 = result_separated['Class'] == 'lesion'
-            area_lesion_px2 = result_separated[cond2 & cond3].filter(regex='Number of pixels')
-            area_lesion_cm2 = result_separated[cond2 & cond3].filter(regex='Area')
+                    # build dataframe with resume infos
+                    dftmp = pd.DataFrame(data=[{f"leaf_ID": leaf_id,
 
-            nb_lesion = len(area_lesion_px2)
-            area_lesion_sum_px2 = area_lesion_px2.sum().values[0]
-            area_lesion_median_px2 = area_lesion_px2.median().values[0]
-            area_lesion_mean_px2 = area_lesion_px2.mean().values[0]
-            area_lesion_std_px2 = area_lesion_px2.std().values[0]
-            area_lesion_min_px2 = area_lesion_px2.min().values[0]
-            area_lesion_max_px2 = area_lesion_px2.max().values[0]
-            percent_lesion_px2 = (area_lesion_sum_px2 / area_leaf_px2) * 100
+                                                f"leaf_Area_{self.calibration_obj.dico_info['unit']}": area_leaf,
+                                                f"{label}_Area_{self.calibration_obj.dico_info['unit']}": area_lesion_sum,
 
-            area_lesion_sum_cm2 = area_lesion_cm2.sum().values[0]
-            area_lesion_median_cm2 = area_lesion_cm2.median().values[0]
-            area_lesion_mean_cm2 = area_lesion_cm2.mean().values[0]
-            area_lesion_std_cm2 = area_lesion_cm2.std().values[0]
-            area_lesion_min_cm2 = area_lesion_cm2.min().values[0]
-            area_lesion_max_cm2 = area_lesion_cm2.max().values[0]
+                                                f"{label}_nb": nb_lesion,
+                                                f"{label}_percent": percent_lesion,
 
-            # build dataframe with resume infos
-            dftmp = pd.DataFrame(data=[{"leaf_ID": leaf_id,
+                                                f"{label}_median-size_{self.calibration_obj.dico_info['unit']}": area_lesion_median,
+                                                f"{label}_mean_size_{self.calibration_obj.dico_info['unit']}": area_lesion_mean,
+                                                f"{label}_SD-size_{self.calibration_obj.dico_info['unit']}": area_lesion_std,
+                                                f"{label}_min-size_{self.calibration_obj.dico_info['unit']}": area_lesion_min,
+                                                f"{label}_max-size_{self.calibration_obj.dico_info['unit']}": area_lesion_max
+                                                }])
+                elif label.lower() not in ["leaf", "background", "lesion"]:
+                    dftmp = pd.DataFrame(data=[{f"leaf_ID": leaf_id,
 
-                                        "leaf_NbPixels_px2": area_leaf_px2,
-                                        "lesion_NbPixels_px2": area_lesion_sum_px2,
+                                                f"leaf_Area_{self.calibration_obj.dico_info['unit']}": area_leaf,
+                                                f"{label}_Area_{self.calibration_obj.dico_info['unit']}": 0,
 
-                                        "leaf_Area_cm2": area_leaf_cm2,
-                                        "lesion_Area_cm2": area_lesion_sum_cm2,
+                                                f"{label}_nb": 0,
+                                                f"{label}_percent": 0,
 
-                                        "lesion_nb": nb_lesion,
-                                        "lesion_percent": percent_lesion_px2,
+                                                f"{label}_median-size_{self.calibration_obj.dico_info['unit']}": 0,
+                                                f"{label}_mean_size_{self.calibration_obj.dico_info['unit']}": 0,
+                                                f"{label}_SD-size_{self.calibration_obj.dico_info['unit']}": 0,
+                                                f"{label}_min-size_{self.calibration_obj.dico_info['unit']}": 0,
+                                                f"{label}_max-size_{self.calibration_obj.dico_info['unit']}": 0
+                                                }])
 
-                                        "lesion_median-size_px2": area_lesion_median_px2,
-                                        "lesion_mean_size_px2": area_lesion_mean_px2,
-                                        "lesion_SD-size_px2": area_lesion_std_px2,
-                                        "lesion_min-size_px2": area_lesion_min_px2,
-                                        "lesion_max-size_px2": area_lesion_max_px2,
-
-                                        "lesion_median-size_cm2": area_lesion_median_cm2,
-                                        "lesion_mean_size_cm2": area_lesion_mean_cm2,
-                                        "lesion_SD-size_cm2": area_lesion_std_cm2,
-                                        "lesion_min-size_cm2": area_lesion_min_cm2,
-                                        "lesion_max-size_cm2": area_lesion_max_cm2
-                                        }])
-            df_by_leaves.append(dftmp)
-        df = pd.concat(df_by_leaves, axis=0, ignore_index=True)
-        df = self.__append_col_df(basename, df)
-        # save results to csv format
-        csv_path_file = self.basedir.joinpath(f"{basename}_merge-lesion.csv").as_posix()
-        if csv_path_file not in self.csv_list:
-            self.csv_list.append(csv_path_file)
-        # print(f"CSV SAVE AT {csv_path_file}")
-        df.to_csv(csv_path_file, index=False, sep="\t", float_format='%.2f')
-
-    def __build_df_merge_old(self, basename, result_separated):
-        # merge all leave all lesion for some info
-        area_leaf = result_separated[result_separated['Class'] == 'leaf'].filter(regex='Number of pixels').sum().values[
-            0]
-        nb_leaves = len(result_separated[result_separated['Class'] == 'leaf'].filter(regex='Number of pixels'))
-        area_lesion = result_separated[result_separated['Class'] == 'lesion'].filter(regex='Number of pixels')
-        nb_lesion = len(area_lesion)
-        area_lesion_sum = area_lesion.sum().values[0]
-        area_lesion_median = area_lesion.median().values[0]
-        area_lesion_mean = area_lesion.mean().values[0]
-        area_lesion_std = area_lesion.std().values[0]
-        percent_lesion = (area_lesion_sum / area_leaf) * 100
-        # print(f"\n{nb_lesion}\t{area_lesion_sum}\t{area_lesion_median}\t{area_leaf}\t{percent_lesion}\t{
-        # area_lesion_std}\n")
-
-        # build dataframe with resume infos
-        df = pd.DataFrame(data=[{"nb_leaves": nb_leaves,
-                                 "leaf_NbPixels": area_leaf,
-                                 "nb_lesion": nb_lesion,
-                                 "lesion_NbPixels": area_lesion_sum,
-                                 "percent_lesion": percent_lesion,
-                                 "median_lesion": area_lesion_median,
-                                 "mean_lesion": area_lesion_mean,
-                                 "SD_lesion": area_lesion_std
-                                 }])
-        df = self.__append_col_df(basename, df)
-        # print(df)
-        # save results to csv format
-        csv_path_file = self.basedir.joinpath(f"{basename}_merge-lesion.csv").as_posix()
-        self.csv_list.append(csv_path_file)
-        # print(f"CSV SAVE AT {csv_path_file}")
-        df.to_csv(csv_path_file, index=False, sep="\t", float_format='%.2f')
+                if not dftmp.empty:
+                    dftmp = self.__append_col_df(basename, dftmp)
+                    # save results to csv format
+                    csv_path_file = self.basedir.joinpath(f"{basename}_merge-{label}.csv").as_posix()
+                    if csv_path_file not in self.csv_dict_list[label]:
+                        self.csv_dict_list[label].append(csv_path_file)
+                        dftmp.to_csv(csv_path_file, index=False, sep="\t", float_format='%.6f')
 
     def __split_leaves(self, image_path, loaded_image):
         # extract path/name from image path
@@ -991,9 +1003,11 @@ class AnalysisImages:
         # ui.displayImg(all_mask_filter_bin, pause=True, title="all_mask_filter_bin erode")
 
         # split to separated labels (creation mask)
+        # TODO: use adaptativeWatershed
         all_mask_label = advmorpho.connectedComponent2dImg(all_mask_filter_bin,
                                                            PyIPSDK.eNeighborhood2dType.eN2T_8Connexity)
         # remove small objects (bad leaves)
+        # TODO: get median leaf size as small size
         label_img = advmorpho.removeSmallShape2dImg(all_mask_label, small_size)
 
         # check if mask is empty after remove small elements
@@ -1083,7 +1097,7 @@ class Calibration:
         except:
             calibrationsElement = xmlet.Element('Calibrations')
             newCalibration = xmlet.SubElement(calibrationsElement, "Calibration")
-            self.create_empty_calibration(newCalibration, name="No calibration")
+            self.create_empty_calibration(newCalibration, name="None")
         for element in calibrationsElement:
             self.calibration_available.append(Dfct.SubElement(element, "Name").text)
             if Dfct.SubElement(element, "Name").text == calibration_name:
@@ -1095,11 +1109,12 @@ class Calibration:
                                   "value": float(Dfct.SubElement(element, "SquareValue").text) /
                                            float(Dfct.SubElement(element, "SquarePixel").text),
                                   }
-        if self.calibration_name not in self.calibration_available:
-            raise ValueError(f"Calibration '{self.calibration_name}' is not on available value: {self.calibration_available}")
+        if self.calibration_name and self.calibration_name not in self.calibration_available:
+            raise ValueError(
+                f"Calibration '{self.calibration_name}' is not on available value: {self.calibration_available}")
 
     @staticmethod
-    def create_empty_calibration(element, name="New calibration"):
+    def create_empty_calibration(element, name="None"):
         Dfct.SubElement(element, "Name").text = name
         Dfct.SubElement(element, "Choice").text = "0"
         Dfct.SubElement(element, "Unit").text = "px"
@@ -1127,11 +1142,75 @@ class Leaf:
 
         self.image_label_blend = None
         self.image_ipsdk_blend = None
+        self.image_ipsdk_blend_dict_class = {}
 
         self.dico_frames_separated = {}
         self.model_name_classification = None
 
-    def analysis(self, model_load, model_to_label_dict, small_object, calibration_obj, save_cut=False,
+    def label_image_to_df(self, split_mask_separated_filter, calibration_obj, label):
+        # check if mask is empty after remove small elements
+        nbLabels = glbmsr.statsMsr2d(split_mask_separated_filter).max
+        if nbLabels > 0:
+            if split_mask_separated_filter.hasGeometricCalibration():
+                calibration = split_mask_separated_filter.getGeometricCalibration()
+            else:
+                calibration = PyIPSDK.createGeometricCalibration2d(calibration_obj.dico_info["value"],
+                                                                   calibration_obj.dico_info["value"],
+                                                                   calibration_obj.dico_info["unit"])
+
+            inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Area2dMsr",
+                                      shapeanalysis.createHolesBasicPolicyMsrParams(False))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "NbPixels2dMsr")
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Perimeter2dMsr",
+                                      shapeanalysis.createHolesBasicPolicyMsrParams(False))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterLengthMsr",
+                                      shapeanalysis.createSkeleton2dDiameterLengthMsrParams(
+                                          PyIPSDK.eSHP_Ignored))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterMeanCurvatureMsr",
+                                      shapeanalysis.createSkeleton2dDiameterMeanCurvatureMsrParams(
+                                          PyIPSDK.eSHP_Ignored))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterTortuosityMsr",
+                                      shapeanalysis.createSkeleton2dDiameterTortuosityMsrParams(
+                                          PyIPSDK.eSHP_Ignored))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dLengthMsr",
+                                      shapeanalysis.createSkeleton2dLengthMsrParams(PyIPSDK.eSHP_Ignored,
+                                                                                    PyIPSDK.eSEC_Leaf))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMaxThicknessMsr",
+                                      shapeanalysis.createSkeleton2dMaxThicknessMsrParams(PyIPSDK.eSHP_Ignored))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanEdgeLengthMsr",
+                                      shapeanalysis.createSkeleton2dMeanEdgeLengthMsrParams(
+                                          PyIPSDK.eSHP_Ignored, PyIPSDK.eSEC_Leaf))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanThicknessMsr",
+                                      shapeanalysis.createSkeleton2dMeanThicknessMsrParams(
+                                          PyIPSDK.eSHP_Ignored))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMinThicknessMsr",
+                                      shapeanalysis.createSkeleton2dMinThicknessMsrParams(PyIPSDK.eSHP_Ignored))
+            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dNbVertexMsr",
+                                      shapeanalysis.createSkeleton2dNbVertexMsrParams(PyIPSDK.eSHP_Ignored,
+                                                                                      PyIPSDK.eSVC_Internal))
+
+            # call to separated object of the class
+            outMeasureSet1 = shapeanalysis.labelAnalysis2d(split_mask_separated_filter,
+                                                           split_mask_separated_filter,
+                                                           inMeasureInfoSet2d)
+
+            # ui.displayImg(split_mask_separated, pause=True)
+            # ui.displayImg(split_mask_separated_filter, pause=True)
+            # convert to panda dataframe
+            df = outset_to_df(outMeasureSet1)
+            df.insert(0, "Class", label)
+            df.insert(0, "leaf_ID", self.leaf_id)
+            self.dico_frames_separated[f"{label}-{self.leaf_id}"] = df
+
+    def label_to_overlay_blend(self, split_mask_filter, i):
+        # use to generate on overlay image with overlay function
+        split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
+        label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i - 1)
+        self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
+
+    def analysis(self, model_load, model_to_label_dict, model_classification_to_label_dict, small_object,
+                 calibration_obj, save_cut=False,
                  model_name_classification=None):
         self.model_name_classification = model_name_classification
         ipsdk_img = util.getROI2dImg(self.full_leaves_ipsdk_img, self.x_position, self.y_position, self.x_size,
@@ -1142,43 +1221,47 @@ class Leaf:
             self.logger.info(f'Save file leaf: {outimgname.as_posix()}')
             PyIPSDK.saveTiffImageFile(outimgname.as_posix(), ipsdk_img)
 
-        # ui.displayImg(ipsdk_img, pause=True)
+        # apply smart segmentation machine learning
+        # TODO: SAVE PROBABILITY IMAGE?
         all_masks, imageProbabilities = ml.pixelClassificationRFWithProbabilitiesImg(ipsdk_img, model_load)
 
-        # create empty overlay image with original size
+        # create empty overlay for label color with original size
         self.image_label_blend = PyIPSDK.createImage(all_masks, PyIPSDK.eImageBufferType.eIBT_UInt16)
         util.eraseImg(self.image_label_blend, 0)
 
-        # create empty overlay image with original size
+        # create empty overlay for split lesions image with original size
         self.image_ipsdk_blend = PyIPSDK.createImage(all_masks, PyIPSDK.eImageBufferType.eIBT_Label16)
         util.eraseImg(self.image_ipsdk_blend, 0)
-
+        # ui.displayImg(all_masks, pause=True, title="all_masks on LOOP")
         # loop for label found on ML
         for label in model_to_label_dict.keys():
             i = int(model_to_label_dict[label]["value"])
-            if label.lower() not in ["background"]:
-                nbLabels = glbmsr.statsMsr2d(all_masks).max
-                if label.lower() in ["leaf"]:
+            if i != 0:  # remove first class ie background
+                nbLabels = glbmsr.statsMsr2d(all_masks).max  # count nb label for extract complet leaf
+                if label.lower() in ["leaf"]:  # if leaf
                     split_mask = bin.thresholdImg(all_masks, 1, nbLabels)
-                    # replace with keep big shapes
-                    calibration = PyIPSDK.createGeometricCalibration2d(1, 1, 'px')
-                    inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "NbPixels2dMsr")
-                    split_mask_separated = advmorpho.adaptiveBinaryWatershed2dImg(split_mask, 0.5,
-                                                                                  PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
-                    output = shapeanalysis.labelAnalysis2d(split_mask_separated, split_mask_separated,
-                                                           inMeasureInfoSet2d)
-                    df = outset_to_df(output)
-                    max_leaf_size = max(df["Number of pixels"]) - 100
-                    split_mask_separated_filter = advmorpho.removeSmallShape2dImg(split_mask_separated, max_leaf_size)
+                    # ui.displayImg(split_mask, pause=True, title="split_mask on LOOP")
+                    split_mask_separated = advmorpho.connectedComponent2dImg(split_mask,
+                                                                             PyIPSDK.eNeighborhood2dType.eN2T_8Connexity)
+                    # ui.displayImg(split_mask_separated, pause=True, title="split_mask_separated on LOOP")
+                    nb = glbmsr.statsMsr2d(split_mask_separated).max
+                    if nb != 1:
+                        split_mask_separated_filter = advmorpho.keepBigShape2dImg(split_mask_separated, 1)
+                    else:
+                        split_mask_separated_filter = split_mask_separated
+                    # ui.displayImg(split_mask_separated_filter, pause=True, title="split_mask_separated_filter on
+                    # LOOP")
+                    self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
                 else:
                     split_mask = bin.thresholdImg(all_masks, i, i)
                     # remove small elements if < x px on connected
                     split_mask_filter = advmorpho.removeSmallShape2dImg(split_mask, small_object)
                     # split mask to individual label
-
-                    split_mask_separated_filter = advmorpho.adaptiveBinaryWatershed2dImg(split_mask_filter, 0.5,
-                                                                                         PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                    # TODO use watershedBinarySeparation2dImg or adaptiveBinaryWatershed2dImg
+                    split_mask_separated_filter = advmorpho.watershedBinarySeparation2dImg(split_mask_filter, 4,
+                    PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                    # split_mask_separated_filter = advmorpho.adaptiveBinaryWatershed2dImg(split_mask_filter, 0.5,
+                    #                                                                      PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
                     # ui.displayImg(split_mask, pause=True)
 
                     if self.model_name_classification and label.lower() in ["lesion"]:
@@ -1188,77 +1271,33 @@ class Leaf:
                                                            Path(vrb.folderShapeClassification).joinpath(
                                                                f"{self.model_name_classification}").as_posix())
                         # ui.displayImg(img3, pause=True, title="img3 on LEAF")
-                        split_mask_filter = bin.thresholdImg(img3, 1.0, 1.0)
-                        # ui.displayImg(split_mask_filter, pause=True, title="split_mask_filter on LEAF")
-                    # use to generate on overlay image with opverlay function
-                    split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
-                    label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i - 1)
-                    self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
-                    # ui.displayImg(self.image_label_blend, pause=True, title=f"{label}image_label_blend ON LOOP")
-
-                    # use to save an IPSDK image labels splited
-                    # TODO use watershedBinarySeparation2dImg or adaptiveBinaryWatershed2dImg
-                    # img_split_labels = advmorpho.watershedBinarySeparation2dImg(split_mask_separated_filter, 4,
-                    # PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
-                    split_mask_separated_filter = advmorpho.adaptiveBinaryWatershed2dImg(split_mask_filter, 0.5,
-                                                                                         PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
-                    # ui.displayImg(img_split_labels, pause=True, title=f"{label}img_split_labels ON LOOP")
-                    self.image_ipsdk_blend = arithm.addImgImg(self.image_ipsdk_blend, split_mask_separated_filter)
-                    # ui.displayImg(self.image_ipsdk_blend, pause=True, title=f"{label}image_ipsdk_blend ON LOOP")
-
-                # check if mask is empty after remove small elements
-                nbLabels = glbmsr.statsMsr2d(split_mask_separated_filter).max
-                if nbLabels > 0:
-                    if split_mask_separated_filter.hasGeometricCalibration():
-                        calibration = split_mask_separated_filter.getGeometricCalibration()
-                    else:
-                        calibration = PyIPSDK.createGeometricCalibration2d(calibration_obj.dico_info["value"], calibration_obj.dico_info["value"], calibration_obj.dico_info["unit"])
-
-                    inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Area2dMsr",
-                                              shapeanalysis.createHolesBasicPolicyMsrParams(False))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "NbPixels2dMsr")
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Perimeter2dMsr",
-                                              shapeanalysis.createHolesBasicPolicyMsrParams(False))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterLengthMsr",
-                                              shapeanalysis.createSkeleton2dDiameterLengthMsrParams(
-                                                  PyIPSDK.eSHP_Ignored))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterMeanCurvatureMsr",
-                                              shapeanalysis.createSkeleton2dDiameterMeanCurvatureMsrParams(
-                                                  PyIPSDK.eSHP_Ignored))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterTortuosityMsr",
-                                              shapeanalysis.createSkeleton2dDiameterTortuosityMsrParams(
-                                                  PyIPSDK.eSHP_Ignored))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dLengthMsr",
-                                              shapeanalysis.createSkeleton2dLengthMsrParams(PyIPSDK.eSHP_Ignored,
-                                                                                            PyIPSDK.eSEC_Leaf))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMaxThicknessMsr",
-                                              shapeanalysis.createSkeleton2dMaxThicknessMsrParams(PyIPSDK.eSHP_Ignored))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanEdgeLengthMsr",
-                                              shapeanalysis.createSkeleton2dMeanEdgeLengthMsrParams(
-                                                  PyIPSDK.eSHP_Ignored, PyIPSDK.eSEC_Leaf))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanThicknessMsr",
-                                              shapeanalysis.createSkeleton2dMeanThicknessMsrParams(
-                                                  PyIPSDK.eSHP_Ignored))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMinThicknessMsr",
-                                              shapeanalysis.createSkeleton2dMinThicknessMsrParams(PyIPSDK.eSHP_Ignored))
-                    PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dNbVertexMsr",
-                                              shapeanalysis.createSkeleton2dNbVertexMsrParams(PyIPSDK.eSHP_Ignored,
-                                                                                              PyIPSDK.eSVC_Internal))
-
-                    # call to separated object of the class
-                    outMeasureSet1 = shapeanalysis.labelAnalysis2d(split_mask_separated_filter,
-                                                                   split_mask_separated_filter,
-                                                                   inMeasureInfoSet2d)
-
-                    # ui.displayImg(split_mask_separated, pause=True)
-                    # ui.displayImg(split_mask_separated_filter, pause=True)
-                    # convert to panda dataframe
-                    df = outset_to_df(outMeasureSet1)
-                    df.insert(0, "Class", label)
-                    df.insert(0, "leaf_ID", self.leaf_id)
-                    self.dico_frames_separated[f"{label}-{self.leaf_id}"] = df
-        self.image_ipsdk_blend = util.convertImg(self.image_ipsdk_blend, PyIPSDK.eImageBufferType.eIBT_Label16)
+                        for label_classification in model_classification_to_label_dict.keys():
+                            indice = int(model_classification_to_label_dict[label_classification]["value"])
+                            split_mask_filter = bin.thresholdImg(img3, indice + 1, indice + 1)
+                            # ui.displayImg(split_mask_filter, pause=True, title="split_mask_filter on LEAF")
+                            split_mask_separated_filter = advmorpho.watershedBinarySeparation2dImg(split_mask_filter, 4,
+                                                                                                   PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                            # split_mask_separated_filter = advmorpho.adaptiveBinaryWatershed2dImg(split_mask_filter, 0.5,
+                            #                                                                      PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                            # ui.displayImg(split_mask_separated_filter, pause=True,
+                            # title=f"split_mask_separated_filter on LEAF for label {label_classification}")
+                            self.label_image_to_df(split_mask_separated_filter, calibration_obj, label_classification)
+                            # ui.displayImg(self.image_ipsdk_blend, pause=True, title="image_ipsdk_blend on LEAF")
+                            self.image_ipsdk_blend_dict_class[label_classification] = split_mask_separated_filter
+                            if label_classification.lower() in ["lesion"]:
+                                self.label_to_overlay_blend(split_mask_separated_filter, i)
+                                # self.image_ipsdk_blend = arithm.addImgImg(self.image_ipsdk_blend,
+                                #                                           split_mask_separated_filter)
+                    if label.lower() in ["lesion"] and not self.model_name_classification:
+                        self.label_to_overlay_blend(split_mask_separated_filter, i)
+                        # self.image_ipsdk_blend = arithm.addImgImg(self.image_ipsdk_blend, split_mask_separated_filter)
+                        self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
+                    if label.lower() not in ["lesion"]:
+                        self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
+                        self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
+        for img in self.image_ipsdk_blend_dict_class.values():
+            util.convertImg(img, PyIPSDK.eImageBufferType.eIBT_Label16)
+        # self.image_ipsdk_blend = util.convertImg(self.image_ipsdk_blend, PyIPSDK.eImageBufferType.eIBT_Label16)
         # ui.displayImg(self.image_ipsdk_blend, pause=True, title="image_ipsdk_blend on LEAF")
 
 
