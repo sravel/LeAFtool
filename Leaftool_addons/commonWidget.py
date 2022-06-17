@@ -230,9 +230,6 @@ class TableWidget(qt.QTableWidget):
         rowValue, columnValue = cellItem.row(), cellItem.column()
         text = self.item(rowValue, self.indice_crop_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
 
-        def glob_re(pattern, strings):
-            return filter(re.compile(pattern).match, strings)
-
         if vrb.mainWindow:
             try:
                 nameImageInput = f"{self.path_images}/{text}.tif"
@@ -240,7 +237,7 @@ class TableWidget(qt.QTableWidget):
 
                 vrb.mainWindow.widgetLabelImage.addNewImage(text, imageInput)
 
-                all_overlay_path = [Path(self.path_images).joinpath(path) for path in glob_re(fr'{text}.*_overlay_ipsdk\.tif$', os.listdir(self.path_images))]
+                all_overlay_path = Path(self.path_images).glob(f'*{text}*_overlay_ipsdk.tif')
                 for file in all_overlay_path:
                     label = file.stem.split("_")[-3]
                     image = PyIPSDK.loadTiffImageFile(file.as_posix())

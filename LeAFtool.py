@@ -618,31 +618,9 @@ class MainInterface(qt.QWidget):
             path_images = Path(csv_file).parent
             df = pd.read_csv(csv_file, index_col=None, header=[0], sep="\t")
             ddict = df.to_dict(orient='list')
-            self.table_final.loadDictionary(ddict,path_images)
-
-# class DataExplorer(qt.QWidget):
-#     def __init__(self, parent):
-#         super().__init__()
-#         # Layout Style
-#         self.layout = qt.QGridLayout()
-#         # self.layout.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Maximum)
-#         # self.layout.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-#         self.layout.setContentsMargins(0, 0, 0, 0)
-#         self.layout.setSpacing(0)
-#         self.setLayout(self.layout)
-#         # self.setContentsMargins(5, 5, 5, 5)
-#         self.showMaximized()
-#
-#         style_global = fct.getStyleSheet()
-#         self.setStyleSheet(style_global)
-#
-#         if parent.leaftool:
-#             csv_file = parent.leaftool.analysis.csv_path_merge
-#             df = pd.read_csv(csv_file, index_col=None, header=[0], squeeze=True, sep="\t")
-#             ddict = df.to_dict(orient='list')
-#             foo = TableWidget(ddict, path_images="/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images/")
-#             self.layout.addWidget(foo, 0, 0, Qt.AlignCenter)
-#         # foo.
+            self.table_final.loadDictionary(ddict, path_images)
+        else:
+            self.table_final.clear()
 
 
 main_interface = MainInterface()
