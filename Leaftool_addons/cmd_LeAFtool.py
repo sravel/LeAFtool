@@ -264,7 +264,10 @@ class MetaInfo:
         return self.rename_to_df[scan_name]
 
     def meta_to_crop_rename(self, scan_name, pos):
-        return self.__dict_names_pos[(scan_name, pos)]["crop_name"]
+        if (scan_name, pos) in self.__dict_names_pos:
+            return self.__dict_names_pos[(scan_name, pos)]["crop_name"]
+        else:
+            return None
 
     def __repr__(self):
         # return f"{self.__class__}({pp(self.__dict__)})"
@@ -387,7 +390,7 @@ class CropAndCutImages:
         def save_image(img, pos):
             basename = self.meta_info.meta_to_crop_rename(scan_name=img, pos=pos)
             file_name = cut_dir_path.joinpath(f"{basename}.tif")
-            if not Path(file_name).exists():
+            if basename and not Path(file_name).exists():
                 x, y, w, h = box
                 im_crop = im_borderless[y: h, x: w].copy()
                 img = (im_crop * 256).astype('uint16')
@@ -397,6 +400,8 @@ class CropAndCutImages:
                     imageIP = morpho.unionLinearOpening2dImg(imageIP, 3.0, PyIPSDK.eBEP_Disable)
                 PyIPSDK.saveTiffImageFile(file_name.as_posix(), imageIP)
                 self.logger.info(f" - {file_name.name}")
+            elif not basename:
+                self.logger.warning(f" - Not metainfo for  {img} at position {pos}")
             else:
                 self.logger.warning(f" - {file_name.name} already cut")
 
@@ -676,7 +681,8 @@ class AnalysisImages:
         for img_file_path in self.files_to_run:
             self.logger.info(f"Analyse scan file: {img_file_path.name}")
             self.analyse_leaves(image_path=img_file_path.as_posix())
-        self.__merge_CSV()
+        if self.files_to_run:
+            self.__merge_CSV()
         self.logger.info("~~~~~~~~~ END STEP MACHINE LEARNING ~~~~~~~~~")
 
     def __merge_CSV(self, sep="\t", rm_merge=False):
@@ -690,8 +696,9 @@ class AnalysisImages:
         for label in self.all_ml_labels:
             if len(self.csv_dict_list[label]) > 1:
                 df_list = (pd.read_csv(f, sep=sep) for f in self.csv_dict_list[label])
-                df_merge = pd.concat(df_list, ignore_index=True, axis=0,).fillna(0)
-                df_merge.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True), inplace=True)
+                df_merge = pd.concat(df_list, ignore_index=True, axis=0, ).fillna(0)
+                df_merge.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True),
+                                     inplace=True)
                 all_merge.append(df_merge)
                 csv_path_file = self.basedir.joinpath(f"global-merge-{label}.csv").as_posix()
                 with open(csv_path_file, "w") as libsizeFile:
@@ -701,10 +708,12 @@ class AnalysisImages:
                         Path(file).unlink(missing_ok=True)
         all_merge_df = all_merge[0]
         for df_ in all_merge[1:]:
-            all_merge_df = all_merge_df.merge(df_, on=self.meta_info.header+["crop_name", "leaf_ID", f"leaf_Area_{self.calibration_obj.dico_info['unit']}"])
+            all_merge_df = all_merge_df.merge(df_, on=self.meta_info.header + ["crop_name", "leaf_ID",
+                                                                               f"leaf_Area_{self.calibration_obj.dico_info['unit']}"])
 
         # all_merge_df = pd.concat(all_merge, ignore_index=True, axis=1, join="inner")#.fillna(0)
-        all_merge_df.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True), inplace=True)
+        all_merge_df.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True),
+                                 inplace=True)
         with open(self.csv_path_merge, "w") as libsizeFile:
             all_merge_df.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
 
@@ -737,16 +746,9 @@ class AnalysisImages:
             # created dict to add all pandas dataframe for each leaf
             dict_frames_separated_leaves = {}
 
-            # build final image with filter overlay
-            geometryRgb2 = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Int32, x_size, y_size)
-            overlayImagefilter = PyIPSDK.createImage(geometryRgb2)
-            util.eraseImg(overlayImagefilter, 0)
-
-            geometryRgb2_label = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Label16, x_size, y_size)
-            overlayImagefilterIPSDK = PyIPSDK.createImage(geometryRgb2_label)
-            util.eraseImg(overlayImagefilterIPSDK, 0)
-
             # loop for cut image and apply machine learning
+            list_leaves_overlay = []
+            list_leaves_overlay_IPSDK = []
             for leaf in self.table_leaves:
                 self.logger.info(f" - Read and extract lesion on leaf {leaf.leaf_id}/{len(self.table_leaves)}")
                 leaf.analysis(model_load=self.model_load,
@@ -756,26 +758,39 @@ class AnalysisImages:
                               calibration_obj=self.calibration_obj,
                               model_name_classification=self.model_name_classification)
                 dict_frames_separated_leaves.update(leaf.dico_frames_separated)
+                list_leaves_overlay.append(leaf)
+                list_leaves_overlay_IPSDK.append(leaf)
 
-                # add leaf mask to full leaves overlay
+            # build final image with filter overlay
+            geometryRgb2 = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Int32, x_size, y_size)
+            overlayImagefilter = PyIPSDK.createImage(geometryRgb2)
+            util.eraseImg(overlayImagefilter, 0)
+            # add leaf mask to full leaves overlay
+            for leaf in list_leaves_overlay:
+                # ui.displayImg(overlayImagefilter, pause=True)
+                # ui.displayImg(leaf.image_label_blend, pause=True)
                 util.putROI2dImg(overlayImagefilter, leaf.image_label_blend, leaf.x_position, leaf.y_position,
                                  overlayImagefilter)
 
-                # loop for all label to extract IPSDK label image:
-                # print(leaf.image_ipsdk_blend_dict_class.items())
-                for label, img in leaf.image_ipsdk_blend_dict_class.items():
-                    util.eraseImg(overlayImagefilterIPSDK, 0)
-                    util.putROI2dImg(overlayImagefilterIPSDK, img, leaf.x_position, leaf.y_position,
-                                     overlayImagefilterIPSDK)
-                    # ui.displayImg(overlayImagefilterIPSDK, pause=True)
-                    PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_{label}_overlay_ipsdk.tif").as_posix(),
-                                              overlayImagefilterIPSDK)
+            # build IPSDK overlay
+            geometryRgb2_label = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Label16, x_size, y_size)
+            overlayImagefilterIPSDK = PyIPSDK.createImage(geometryRgb2_label)
+            util.eraseImg(overlayImagefilterIPSDK, 0)
 
-            #     util.putROI2dImg(overlayImagefilterIPSDK, leaf.image_ipsdk_blend, leaf.x_position, leaf.y_position,
-            #                      overlayImagefilterIPSDK)
-            #     # ui.displayImg(overlayImagefilterIPSDK, pause=True)
-            #     PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_overlay_ipsdk.tif").as_posix(),
-            #                               overlayImagefilterIPSDK)
+            # loop for all label to extract IPSDK label image:
+            # print(leaf.image_ipsdk_blend_dict_class.items())
+            dico_label_overlay_IPSDK = {}
+            for leaf in list_leaves_overlay_IPSDK:
+                for label, img in leaf.image_ipsdk_blend_dict_class.items():
+                    if label not in dico_label_overlay_IPSDK:
+                        dico_label_overlay_IPSDK[label] = PyIPSDK.createImage(geometryRgb2_label)
+                    util.putROI2dImg(dico_label_overlay_IPSDK[label], img, leaf.x_position, leaf.y_position,
+                                     dico_label_overlay_IPSDK[label])
+                    # ui.displayImg(overlayImagefilterIPSDK, pause=True)
+            for label, img_overlay in dico_label_overlay_IPSDK.items():
+                PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_{label}_overlay_ipsdk.tif").as_posix(),
+                                              img_overlay)
+
             # # build all csv tables
             result_separated = pd.concat(dict_frames_separated_leaves.values(),
                                          keys=dict_frames_separated_leaves.keys(), ignore_index=True)
@@ -879,7 +894,7 @@ class AnalysisImages:
     def __append_col_df(self, basename, df):
         # print(f"APPEND DF {basename} {df}")
         df.insert(0, "crop_name", basename)
-        df_merge = pd.merge(self.meta_info.dataframe_with_crop_name, df, on="crop_name")#,how="outer")
+        df_merge = pd.merge(self.meta_info.dataframe_with_crop_name, df, on="crop_name")  # ,how="outer")
         return df_merge
 
     def __build_df_split(self, basename, result_separated=None):
@@ -1208,6 +1223,7 @@ class Leaf:
         split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
         label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i - 1)
         self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
+        # ui.displayImg(self.image_label_blend, pause=True, title="self.image_label_blend")
 
     def analysis(self, model_load, model_to_label_dict, model_classification_to_label_dict, small_object,
                  calibration_obj, save_cut=False,
@@ -1259,7 +1275,7 @@ class Leaf:
                     # split mask to individual label
                     # TODO use watershedBinarySeparation2dImg or adaptiveBinaryWatershed2dImg
                     split_mask_separated_filter = advmorpho.watershedBinarySeparation2dImg(split_mask_filter, 4,
-                    PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+                                                                                           PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
                     # split_mask_separated_filter = advmorpho.adaptiveBinaryWatershed2dImg(split_mask_filter, 0.5,
                     #                                                                      PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
                     # ui.displayImg(split_mask, pause=True)
@@ -1286,19 +1302,18 @@ class Leaf:
                             self.image_ipsdk_blend_dict_class[label_classification] = split_mask_separated_filter
                             if label_classification.lower() in ["lesion"]:
                                 self.label_to_overlay_blend(split_mask_separated_filter, i)
-                                # self.image_ipsdk_blend = arithm.addImgImg(self.image_ipsdk_blend,
-                                #                                           split_mask_separated_filter)
                     if label.lower() in ["lesion"] and not self.model_name_classification:
                         self.label_to_overlay_blend(split_mask_separated_filter, i)
-                        # self.image_ipsdk_blend = arithm.addImgImg(self.image_ipsdk_blend, split_mask_separated_filter)
                         self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
+                        self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
                     if label.lower() not in ["lesion"]:
                         self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
                         self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
         for img in self.image_ipsdk_blend_dict_class.values():
             util.convertImg(img, PyIPSDK.eImageBufferType.eIBT_Label16)
-        # self.image_ipsdk_blend = util.convertImg(self.image_ipsdk_blend, PyIPSDK.eImageBufferType.eIBT_Label16)
-        # ui.displayImg(self.image_ipsdk_blend, pause=True, title="image_ipsdk_blend on LEAF")
+
+    def __repr__(self):
+        return f"{self.__class__}({pp(self.__dict__)})"
 
 
 class LeAFtool:
