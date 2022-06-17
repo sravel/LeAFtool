@@ -663,7 +663,7 @@ class AnalysisImages:
 
         for label in self.all_ml_labels:
             self.csv_dict_list[label] = [self.basedir.joinpath(path).as_posix() for path in
-                                         glob_re(fr'.*{label}_merge-lesion\.csv$', os.listdir(self.basedir.as_posix()))]
+                                         glob_re(fr'.*_merge-{label}\.csv$', os.listdir(self.basedir.as_posix()))]
         basename_files_to_run = list(full_files_set - mask_overlay_files_filter_set)
         if self.force_rerun:
             self.files_to_run = self.full_files
@@ -678,11 +678,12 @@ class AnalysisImages:
             self.logger.info(f"All files already run")
         elif not self.files_to_run and not self.full_files:
             raise FileNotFoundError(f"Not found file extension '.tif' on folder: {self.basedir.as_posix()}")
-        for img_file_path in self.files_to_run:
-            self.logger.info(f"Analyse scan file: {img_file_path.name}")
+        nb_scan = len(self.files_to_run)
+        for indice, img_file_path in enumerate(self.files_to_run, 1):
+            self.logger.info(f"Analyse scan file {indice}/{nb_scan}: {img_file_path.name}")
             self.analyse_leaves(image_path=img_file_path.as_posix())
-        if self.files_to_run:
-            self.__merge_CSV()
+        # if self.files_to_run:
+        self.__merge_CSV()
         self.logger.info("~~~~~~~~~ END STEP MACHINE LEARNING ~~~~~~~~~")
 
     def __merge_CSV(self, sep="\t", rm_merge=False):
@@ -693,7 +694,9 @@ class AnalysisImages:
             rm_merge: if True, remove intermediate csv files Default: False
         """
         all_merge = []
+
         for label in self.all_ml_labels:
+            print(len(self.csv_dict_list[label]))
             if len(self.csv_dict_list[label]) > 1:
                 df_list = (pd.read_csv(f, sep=sep) for f in self.csv_dict_list[label])
                 df_merge = pd.concat(df_list, ignore_index=True, axis=0, ).fillna(0)
@@ -714,8 +717,32 @@ class AnalysisImages:
         # all_merge_df = pd.concat(all_merge, ignore_index=True, axis=1, join="inner")#.fillna(0)
         all_merge_df.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True),
                                  inplace=True)
+
+        def selector(x):
+            if x == "leaf_ID":
+                return "count"
+            elif all_merge_df.head(1)[x].dtype == "object":
+                return lambda x: ''.join(x.unique())
+            elif "min-size" in x:
+                return "min"
+            elif "max-size" in x:
+                return "max"
+            elif "mean-size" in x:
+                return "mean"
+            elif "median-size" in x:
+                return "median"
+            elif "SD-size" in x:
+                return "std"
+            else:
+                return "sum"
+
+        agg_dict = {f: selector(f) for f in all_merge_df.columns[2:]}
+        all_merge_df_agg = all_merge_df.groupby([self.meta_info.header[0], self.meta_info.header[1]]).agg(agg_dict).reset_index()
         with open(self.csv_path_merge, "w") as libsizeFile:
             all_merge_df.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
+        with open(self.csv_path_merge.replace(".csv","_aggragated_leaves.csv"), "w") as libsizeFile:
+            all_merge_df_agg.columns = ['number_of_leaves' if x == 'leaf_ID' else x for x in all_merge_df_agg.columns]
+            all_merge_df_agg.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
 
     def analyse_leaves(self, image_path):
         # extract path/name from image path
@@ -908,14 +935,15 @@ class AnalysisImages:
     def __build_df_merge(self, basename, result_separated):
         # merge all lesion by leaves
         leaves = result_separated[result_separated['Class'] == 'leaf']['leaf_ID']
+        dico_df_by_leaves_label = {}
         for leaf_id in leaves:
             cond1 = result_separated['Class'] == 'leaf'
             cond2 = result_separated['leaf_ID'] == int(leaf_id)
             # area_leaf_px2 = result_separated[cond1 & cond2]['Number of pixels'].values[0]
             area_leaf = result_separated[cond1 & cond2].filter(regex='Area').values[0][0]
             for label in self.all_ml_labels:
-                df_by_leaves = []
                 dftmp = pd.DataFrame()
+
                 if label in result_separated['Class'].unique() and label.lower() not in ["leaf"]:
                     cond3 = result_separated['Class'] == label
                     # area_lesion_px2 = result_separated[cond2 & cond3].filter(regex='Number of pixels')
@@ -939,7 +967,7 @@ class AnalysisImages:
                                                 f"{label}_percent": percent_lesion,
 
                                                 f"{label}_median-size_{self.calibration_obj.dico_info['unit']}": area_lesion_median,
-                                                f"{label}_mean_size_{self.calibration_obj.dico_info['unit']}": area_lesion_mean,
+                                                f"{label}_mean-size_{self.calibration_obj.dico_info['unit']}": area_lesion_mean,
                                                 f"{label}_SD-size_{self.calibration_obj.dico_info['unit']}": area_lesion_std,
                                                 f"{label}_min-size_{self.calibration_obj.dico_info['unit']}": area_lesion_min,
                                                 f"{label}_max-size_{self.calibration_obj.dico_info['unit']}": area_lesion_max
@@ -954,19 +982,26 @@ class AnalysisImages:
                                                 f"{label}_percent": 0,
 
                                                 f"{label}_median-size_{self.calibration_obj.dico_info['unit']}": 0,
-                                                f"{label}_mean_size_{self.calibration_obj.dico_info['unit']}": 0,
+                                                f"{label}_mean-size_{self.calibration_obj.dico_info['unit']}": 0,
                                                 f"{label}_SD-size_{self.calibration_obj.dico_info['unit']}": 0,
                                                 f"{label}_min-size_{self.calibration_obj.dico_info['unit']}": 0,
                                                 f"{label}_max-size_{self.calibration_obj.dico_info['unit']}": 0
                                                 }])
+                if label not in dico_df_by_leaves_label:
+                    dico_df_by_leaves_label[label] = [dftmp]
+                else:
+                    dico_df_by_leaves_label[label].append(dftmp)
 
-                if not dftmp.empty:
-                    dftmp = self.__append_col_df(basename, dftmp)
-                    # save results to csv format
-                    csv_path_file = self.basedir.joinpath(f"{basename}_merge-{label}.csv").as_posix()
-                    if csv_path_file not in self.csv_dict_list[label]:
-                        self.csv_dict_list[label].append(csv_path_file)
-                        dftmp.to_csv(csv_path_file, index=False, sep="\t", float_format='%.6f')
+        for label, list_df in dico_df_by_leaves_label.items():
+            dftmp = pd.concat(list_df, axis=0, ignore_index=True)
+            if not dftmp.empty:
+                dftmp = self.__append_col_df(basename, dftmp)
+                # save results to csv format
+                csv_path_file = self.basedir.joinpath(f"{basename}_merge-{label}.csv").as_posix()
+                if csv_path_file not in self.csv_dict_list[label]:
+                    self.csv_dict_list[label].append(csv_path_file)
+                    dftmp.to_csv(csv_path_file, index=False, sep="\t", float_format='%.6f')
+        # concat
 
     def __split_leaves(self, image_path, loaded_image):
         # extract path/name from image path
