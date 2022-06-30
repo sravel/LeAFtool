@@ -167,6 +167,7 @@ class TableWidget(qt.QTableWidget):
 
         self.ddict = ddict
         self.indice_crop_name = None
+        self.indice_class_name = None
         self.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
         self.path_images = path_images
 
@@ -192,6 +193,8 @@ class TableWidget(qt.QTableWidget):
             for indice, name in enumerate(self.ddict):
                 if name == "crop_name":
                     self.indice_crop_name = indice
+                if name == "Class":
+                    self.indice_class_name = indice
                 self.setRowCount(len(self.ddict[name]))
                 cell = qt.QTableWidgetItem(name)
                 self.setHorizontalHeaderItem(col, cell)
@@ -225,12 +228,15 @@ class TableWidget(qt.QTableWidget):
             self.window().activateWindow()
 
     def cellClick(self, cellItem):
-        vrb.mainWindow.widgetLabelImage.clearAll()
-
-        rowValue, columnValue = cellItem.row(), cellItem.column()
-        text = self.item(rowValue, self.indice_crop_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
-
         if vrb.mainWindow:
+            vrb.mainWindow.widgetLabelImage.clearAll()
+
+            rowValue, columnValue = cellItem.row(), cellItem.column()
+            text = self.item(rowValue, self.indice_crop_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
+            if self.indice_class_name:
+                class_label = self.item(rowValue, self.indice_class_name).text()
+            else:
+                class_label = "lesion"
             try:
                 nameImageInput = f"{self.path_images}/{text}.tif"
                 imageInput = PyIPSDK.loadTiffImageFile(nameImageInput)

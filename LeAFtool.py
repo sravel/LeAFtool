@@ -56,7 +56,7 @@ class OutLog:
         """
         self.edit = edit
         self.out = out
-        self.edit.setStyleSheet('background-color: #a3a0a0;')
+        self.edit.setStyleSheet('background-color: #707070;')
 
     def write(self, message):
         if "DEBUG" in message.upper():
@@ -117,6 +117,7 @@ class ToolsActivation(qt.QGroupBox):
         self.layout = qt.QGridLayout()
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.setLayout(self.layout)
+        self.setAutoFillBackground(True)
 
         # Widgets
         self.plant_model_label = qt.QLabel()
@@ -148,12 +149,10 @@ class ToolsActivation(qt.QGroupBox):
         self.merge_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
 
         self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
-        not_resize = self.csv_file.sizePolicy()
-        not_resize.setRetainSizeWhenHidden(True)
-        self.csv_file.setSizePolicy(not_resize)
 
         self.list_selection = TwoListSelection()
-        self.list_selection.setFixedSize(int(700 * vrb.ratio), int(80 * vrb.ratio))
+        self.list_selection.setAutoFillBackground(True)
+        self.list_selection.setMaximumHeight(int(80 * vrb.ratio))
 
         # Position widgets
         self.layout.addWidget(self.plant_model_label, 0, 0, Qt.AlignLeft)
@@ -174,7 +173,8 @@ class ToolsActivation(qt.QGroupBox):
         tools_group.layout.addWidget(self.merge_checkbox)
         tools_group.layout.addStretch()
         tools_group.setFixedWidth(int(500 * vrb.ratio))
-        self.layout.addWidget(tools_group, 0, 3, Qt.AlignLeft)
+        tools_group.setAutoFillBackground(True)
+        self.layout.addWidget(tools_group, 0, 3, Qt.AlignTop)
 
         # Meta group
         self.meta_group = qt.QGroupBox()
@@ -187,7 +187,9 @@ class ToolsActivation(qt.QGroupBox):
         self.meta_group.layout.addWidget(self.csv_file)
         self.meta_group.layout.addWidget(self.list_selection)
         self.meta_group.layout.addStretch()
+        self.meta_group.setAutoFillBackground(True)
         self.layout.addWidget(self.meta_group, 1, 0, 1, 4)
+
 
         # connections
         self.draw_checkbox.stateChanged.connect(self.update_activation_tools)
@@ -287,7 +289,7 @@ class LeaftoolParams(qt.QGroupBox):
         # Layout Style
         self.setTitle("LeAFtool params")
         self.setStyleSheet(style)
-        self.setMaximumSize(int(980 * vrb.ratio), int(70 * vrb.ratio))
+        self.setAutoFillBackground(True)
         self.layout = qt.QGridLayout()
         self.layout.setContentsMargins(10, 20, 10, 10)
         self.setLayout(self.layout)
@@ -379,12 +381,13 @@ class RunLeAFtool(qt.QWidget):
         self.setContentsMargins(5, 5, 5, 5)
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
-        self.setMaximumWidth(1920)
+        self.setAutoFillBackground(True)
 
         # Create the text output widget.
         self.process = qt.QTextEdit(self, readOnly=True)
-        self.process.setMinimumHeight(50)
-        self.process.setMaximumSize(int(980 * vrb.ratio), 200)
+        self.process.setMinimumHeight(80)
+        self.process.setAutoFillBackground(True)
+
         sys.stdout = OutLog(self.process, sys.stdout)
         sys.stderr = OutLog(self.process, sys.stderr)
 
@@ -392,6 +395,8 @@ class RunLeAFtool(qt.QWidget):
         self.preview_config = qt.QPlainTextEdit()
         self.preview_config = YAMLEditor()
         self.preview_config.setMinimumWidth(500)
+        self.preview_config.setMaximumWidth(int(1920))
+        self.preview_config.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
 
         # add path config file
         self.yaml_path = vrb.folderMacroInterface + "/LeAFtool/config.yaml"
@@ -417,14 +422,6 @@ class RunLeAFtool(qt.QWidget):
         self.layout.addWidget(self.layer_ml_merge, 1, 1)
         self.layout.addWidget(self.layer_leaftool_params, 2, 0, 1, 2)
         self.layout.addWidget(self.process, 3, 0, 1, 2)
-        # self.layout.setColumnMinimumWidth(460, 0)
-        # self.layout.setColumnStretch(0, 1)
-        # self.layout.setColumnStretch(1, 2)
-        # self.layout.setColumnStretch(2, 3)
-        # # size policy
-        # not_resize = self.preview_config.sizePolicy()
-        # not_resize.setRetainSizeWhenHidden(True)
-        # self.preview_config.setSizePolicy(not_resize)
 
         ## INIT states:
         ##### connection
@@ -506,7 +503,11 @@ class RunLeAFtool(qt.QWidget):
 
     def upload_yaml(self):
         defaultFolder = return_default_folder()
-        filename = qt.QFileDialog.getOpenFileName(self, "Select your file", defaultFolder, "yaml file (*.yaml)")
+        try:
+            default_filename = list(Path(defaultFolder).glob("*.yaml"))[0].as_posix()
+        except IndexError:
+            default_filename = defaultFolder
+        filename = qt.QFileDialog.getOpenFileName(self, "Select your file", default_filename, "yaml file (*.yaml)")
         filename = filename[0]
         if filename != "" and filename:
             self.yaml_path = filename
@@ -518,7 +519,8 @@ class RunLeAFtool(qt.QWidget):
 
     def save_yaml(self):
         defaultFolder = return_default_folder()
-        filename = qt.QFileDialog.getSaveFileName(self, "Save config yaml file", defaultFolder, "yaml file(*.yaml)")
+        default_filename = Path(defaultFolder).joinpath("config.yaml").as_posix()
+        filename = qt.QFileDialog.getSaveFileName(self, "Save config yaml file", default_filename, "yaml file(*.yaml)")
         filename = filename[0]
         if filename != "" and filename:
             self.yaml_path = filename
@@ -555,9 +557,6 @@ class MainInterface(qt.QWidget):
         self.setLayout(self.layout)
         self.setContentsMargins(5, 5, 5, 5)
         self.setAutoFillBackground(True)
-        # windows size
-        # self.setMinimumWidth(int(1920))
-        self.setMaximumSize(int(1800), int(900))
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
 
@@ -575,15 +574,16 @@ class MainInterface(qt.QWidget):
 
         # Initialize tab screen
         self.tabs = qt.QTabWidget()
+        self.tabs.setAutoFillBackground(True)
         self.tabs.setTabPosition(qt.QTabWidget.West)
         self.tab1 = RunLeAFtool()
+        self.tab1.setAutoFillBackground(True)
         #
         # if self.tab1.leaftool:
         #     csv_file = self.tab1.leaftool.analysis.csv_path_merge
         #     path_images = self.tab1.layer_ml_merge.images_path
         #     print(csv_file)
         #     print(path_images)
-        self.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
 
         self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
         not_resize = self.csv_file.sizePolicy()
@@ -596,11 +596,12 @@ class MainInterface(qt.QWidget):
         table_group.setTitle("Merge Results")
         table_group.setStyleSheet(style)
         table_group.layout = qt.QVBoxLayout()
-        table_group.layout.setContentsMargins(5, 5, 5, 5)
+        table_group.layout.setContentsMargins(10, 10, 10, 10)
         table_group.setLayout(table_group.layout)
         table_group.layout.addWidget(self.csv_file)
         table_group.layout.addWidget(self.table_final)
-        self.layout.addWidget(table_group, 0, 3, Qt.AlignLeft)
+        table_group.setAutoFillBackground(True)
+        self.layout.addWidget(table_group, 0, 3, Qt.AlignCenter)
 
         self.tab2 = table_group
 
