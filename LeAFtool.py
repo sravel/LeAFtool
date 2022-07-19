@@ -1,7 +1,10 @@
 import logging.config
 import sys
+import subprocess
 from pathlib import Path
+from datetime import timedelta
 from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
+from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from PyQt5 import QtGui, Qsci
 import PyQt5.QtWidgets as qt
 from PyQt5.QtGui import QIcon
@@ -20,19 +23,26 @@ from Leaftool_addons.commonWidget import style, return_default_folder, TableWidg
 from Leaftool_addons.cmd_LeAFtool import *
 
 
-DEFAULT_LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'loggers': {
-        '': {
-            'handlers': [],
-            'level': 'DEBUG',
-            'propagate': True,
-        }
-    }
-}
+logging.config.dictConfig({
+            'version': 1,
+            'disable_existing_loggers': False,
+            'handlers': {
+                'stdout_handler': {
+                    'level': f'{"DEBUG"}',
+                    'class': "logging.StreamHandler",
+                    'formatter': '',
+                    'stream': 'ext://sys.stdout',
+                },
+            },
+            'loggers': {
+                "": {
+                    'handlers': ['stdout_handler'],
+                    'level': f'{"DEBUG"}',
+                    'propagate': True,
+                },
+            }
+        })
 
-logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger('LeAFtool GUI')
 
 try:
@@ -47,7 +57,7 @@ except:
     pass
 
 
-class OutLog:
+class OutLog():
     def __init__(self, edit, out=None):
         """(edit, out=None, color=None) -> can write stdout, stderr to a
         QTextEdit.
@@ -308,9 +318,15 @@ class LeaftoolParams(qt.QGroupBox):
         self.upload.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
 
         self.run_label = qt.QLabel()
-        self.run_label.setText("Run LeAFtool:")
+        self.run_label.setText("Run:")
         self.run = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/run.png")
         self.run.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+
+        self.stop_label = qt.QLabel()
+        self.stop_label.setText("Stop:")
+        self.button_stop = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/stop.png")
+        self.button_stop.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.button_stop.setEnabled(False)
 
         self.preview_yaml_checkbox = qt.QCheckBox()
         self.preview_yaml_checkbox.setChecked(True)
@@ -332,8 +348,11 @@ class LeaftoolParams(qt.QGroupBox):
         self.layout.addWidget(self.run_label, 0, 4, Qt.AlignRight)
         self.layout.addWidget(self.run, 0, 5, Qt.AlignLeft)
 
-        self.layout.addWidget(self.preview_yaml_checkbox, 0, 6, Qt.AlignCenter)
-        self.layout.addWidget(self.debug_checkbox, 0, 7, Qt.AlignCenter)
+        self.layout.addWidget(self.stop_label, 0, 6, Qt.AlignRight)
+        self.layout.addWidget(self.button_stop, 0, 7, Qt.AlignLeft)
+
+        self.layout.addWidget(self.preview_yaml_checkbox, 0, 8, Qt.AlignCenter)
+        self.layout.addWidget(self.debug_checkbox, 0, 9, Qt.AlignCenter)
 
         # Init state
         self.hide_preview_yaml()
@@ -364,8 +383,7 @@ class LeaftoolParams(qt.QGroupBox):
 
 
 class RunLeAFtool(qt.QWidget):
-    """
-    """
+    """"""
     def __init__(self):
         super().__init__()
         self.dict_for_yaml = {}
@@ -373,6 +391,7 @@ class RunLeAFtool(qt.QWidget):
         self.logger = logger
         self.leaftool = None
         self.connect = None
+        self.running_process = None
 
         # Layout Style
         self.layout = qt.QGridLayout()
@@ -390,6 +409,9 @@ class RunLeAFtool(qt.QWidget):
 
         sys.stdout = OutLog(self.process, sys.stdout)
         sys.stderr = OutLog(self.process, sys.stderr)
+        #
+        # sys.stdout = OutLog(self.process)
+        # sys.stderr = OutLog(self.process)
 
         # add preview of yaml file
         self.preview_config = qt.QPlainTextEdit()
@@ -422,15 +444,38 @@ class RunLeAFtool(qt.QWidget):
         self.layout.addWidget(self.layer_ml_merge, 1, 1)
         self.layout.addWidget(self.layer_leaftool_params, 2, 0, 1, 2)
         self.layout.addWidget(self.process, 3, 0, 1, 2)
-
-        ## INIT states:
-        ##### connection
         self.load_yaml()
 
         ## Layer leaftool params connection
         self.layer_leaftool_params.upload.clicked.connect(self.upload_yaml)
         self.layer_leaftool_params.save.clicked.connect(self.save_yaml)
-        self.layer_leaftool_params.run.clicked.connect(self.run_leaftool)
+        self.layer_leaftool_params.run.clicked.connect(self.start_threads)
+        self.layer_leaftool_params.button_stop.clicked.connect(self.abort_workers)
+
+    def start_threads(self):
+        if self.save_yaml():
+            self.process.clear()
+            self.layer_leaftool_params.run.setDisabled(True)
+            self.layer_leaftool_params.run.setEnabled(False)
+            self.layer_leaftool_params.button_stop.setDisabled(False)
+            self.layer_leaftool_params.button_stop.setEnabled(True)
+
+            # self.leaftool = LeAFtool(config_file=self.yaml_path)
+            cmd = f"python3 {Path(__file__).parent.joinpath('Leaftool_addons', 'cmd_LeAFtool.py')} -c {Path(self.yaml_path).resolve()}"
+            self.logger.info(cmd)
+            self.running_process = subprocess.Popen("exec " + cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            with self.running_process:
+                for line in iter(self.running_process.stdout.readline, b''):
+                    print(line.decode("utf-8").rstrip())
+            self.layer_leaftool_params.run.setDisabled(False)
+            self.layer_leaftool_params.button_stop.setDisabled(True)
+
+    def abort_workers(self):
+        self.logger.debug('Asking to abort')
+        self.running_process.kill()
+        self.logger.info("kill success")
+        self.layer_leaftool_params.run.setDisabled(False)
+        self.layer_leaftool_params.button_stop.setDisabled(True)
 
     def load_yaml(self):
         with open(self.yaml_path, "r") as file_config:
@@ -532,14 +577,16 @@ class RunLeAFtool(qt.QWidget):
         else:
             return False
 
+    @staticmethod
     def run_leaftool(self):
         self.process.clear()
+        self.logger.error(f'starting threads {self.worker}')
         if self.save_yaml():
             self.layer_leaftool_params.run.setDisabled(True)
             with Timer() as timer:
                 self.leaftool = LeAFtool(config_file=self.yaml_path)
-            # if leaftool and leaftool.analysis.csv_path_merge:
-            #     print(leaftool.analysis.csv_path_merge)
+            if self.leaftool and self.leaftool.analysis.csv_path_merge:
+                print(self.leaftool.analysis.csv_path_merge)
             self.logger.info(f'Total time in seconds:{timer.interval}')
             qt.QApplication.processEvents()
 
