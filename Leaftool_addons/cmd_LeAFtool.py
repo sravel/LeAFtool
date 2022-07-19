@@ -682,9 +682,12 @@ class AnalysisImages:
         for indice, img_file_path in enumerate(self.files_to_run, 1):
             self.logger.info(f"Analyse scan file {indice}/{nb_scan}: {img_file_path.name}")
             self.analyse_leaves(image_path=img_file_path.as_posix())
-        # if self.files_to_run:
-        self.__merge_CSV()
         self.logger.info("~~~~~~~~~ END STEP MACHINE LEARNING ~~~~~~~~~")
+        # if self.files_to_run:
+        self.logger.info("~~~~~~~~~ START MERGE CSV ~~~~~~~~~")
+        self.__merge_CSV()
+        self.logger.info("~~~~~~~~~ END MERGE CSV ~~~~~~~~~")
+
 
     def __merge_CSV(self, sep="\t", rm_merge=False):
         """merge all CSV file include on final folder
@@ -696,7 +699,7 @@ class AnalysisImages:
         all_merge = []
 
         for label in self.all_ml_labels:
-            print(len(self.csv_dict_list[label]))
+
             if len(self.csv_dict_list[label]) > 1:
                 df_list = (pd.read_csv(f, sep=sep) for f in self.csv_dict_list[label])
                 df_merge = pd.concat(df_list, ignore_index=True, axis=0, ).fillna(0)
@@ -704,11 +707,13 @@ class AnalysisImages:
                                      inplace=True)
                 all_merge.append(df_merge)
                 csv_path_file = self.basedir.joinpath(f"global-merge-{label}.csv").as_posix()
+                self.logger.info(f"Merge all files for class: {label} to {csv_path_file}")
                 with open(csv_path_file, "w") as libsizeFile:
                     df_merge.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
                 if rm_merge:
                     for file in self.csv_dict_list[label]:
                         Path(file).unlink(missing_ok=True)
+        self.logger.info(f"Merge all csv files to {self.csv_path_merge}")
         all_merge_df = all_merge[0]
         for df_ in all_merge[1:]:
             all_merge_df = all_merge_df.merge(df_, on=self.meta_info.header + ["crop_name", "leaf_ID",
@@ -738,6 +743,7 @@ class AnalysisImages:
 
         agg_dict = {f: selector(f) for f in all_merge_df.columns[2:]}
         all_merge_df_agg = all_merge_df.groupby([self.meta_info.header[0], self.meta_info.header[1]]).agg(agg_dict).reset_index()
+
         with open(self.csv_path_merge, "w") as libsizeFile:
             all_merge_df.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
         with open(self.csv_path_merge.replace(".csv","_aggragated_leaves.csv"), "w") as libsizeFile:
@@ -811,10 +817,13 @@ class AnalysisImages:
                 for label, img in leaf.image_ipsdk_blend_dict_class.items():
                     if label not in dico_label_overlay_IPSDK:
                         dico_label_overlay_IPSDK[label] = PyIPSDK.createImage(geometryRgb2_label)
+                        util.eraseImg(dico_label_overlay_IPSDK[label], 0)
+                    # ui.displayImg(img, pause=True, title=f"{label} {len(dico_label_overlay_IPSDK)}")
                     util.putROI2dImg(dico_label_overlay_IPSDK[label], img, leaf.x_position, leaf.y_position,
                                      dico_label_overlay_IPSDK[label])
                     # ui.displayImg(overlayImagefilterIPSDK, pause=True)
             for label, img_overlay in dico_label_overlay_IPSDK.items():
+                # ui.displayImg(img_overlay, pause=True, title=f" {basename}_{label}_overlay_ipsdk.tif   {label}")
                 PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_{label}_overlay_ipsdk.tif").as_posix(),
                                               img_overlay)
 
@@ -1016,7 +1025,8 @@ class AnalysisImages:
         if self.split_ML:
             all_mask_label = ml.pixelClassificationRFImg(loaded_image, self.model_load)
             leaf_indice = self.model_to_label_dict["leaf"]["value"]
-            all_mask = bin.thresholdImg(all_mask_label, leaf_indice, leaf_indice)
+            nbLabels = glbmsr.statsMsr2d(all_mask_label).max
+            all_mask = bin.thresholdImg(all_mask_label, leaf_indice, nbLabels)
         ##############################################
         # If not machine learning for extract
         else:
@@ -1333,7 +1343,7 @@ class Leaf:
                             # ui.displayImg(split_mask_separated_filter, pause=True,
                             # title=f"split_mask_separated_filter on LEAF for label {label_classification}")
                             self.label_image_to_df(split_mask_separated_filter, calibration_obj, label_classification)
-                            # ui.displayImg(self.image_ipsdk_blend, pause=True, title="image_ipsdk_blend on LEAF")
+                            # ui.displayImg(split_mask_separated_filter, pause=True, title=f"split_mask_separated_filter on {label_classification} LEAF")
                             self.image_ipsdk_blend_dict_class[label_classification] = split_mask_separated_filter
                             if label_classification.lower() in ["lesion"]:
                                 self.label_to_overlay_blend(split_mask_separated_filter, i)
@@ -1376,7 +1386,8 @@ class LeAFtool:
 
         self.logger = self.configure_logger('LeAFtool')
         # for printing in logFile
-        cmd_line = " ".join(sys.argv)
+        # cmd_line = " ".join(sys.argv)
+        cmd_line = f"python3 {__file__} -c {Path(config_file).resolve()}"
         self.logger.info(f"{' LeAFtool analysis start ':#^80s}")
         self.logger.info(f"Command line : {cmd_line}")
         self.logger.debug("DEBUG MODE")
@@ -1865,6 +1876,7 @@ def build_parser():
 
 @welcome_args(version, build_parser())
 def main():
+    from datetime import timedelta
     prog_args = build_parser().parse_args()
     #####################################################
     # EDIT ONLY THIS LINE TO CHANGE CONFIG FILE
@@ -1875,7 +1887,7 @@ def main():
     #####################################################
     with Timer() as timer:
         instance = LeAFtool(config_file=prog_args.config_file, debug=prog_args.debug)
-    instance.logger.info(f'Total time in seconds:{timer.interval}', extra={'className': 'LeAFtool'})
+    instance.logger.info(f'Total time in seconds:{timedelta(seconds=timer.interval)}', extra={'className': 'LeAFtool'})
 
 
 if __name__ == '__main__':
