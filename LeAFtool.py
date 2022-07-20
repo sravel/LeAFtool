@@ -113,6 +113,7 @@ class YAMLEditor(Qsci.QsciScintilla):
         # Show whitespace to help detect whitespace errors
         self.setWhitespaceVisibility(True)
         self.setIndentationGuides(True)
+        self.setAutoFillBackground(True)
 
 
 class ToolsActivation(qt.QGroupBox):
@@ -127,6 +128,7 @@ class ToolsActivation(qt.QGroupBox):
         self.setTitle("Globals Parameters")
         self.setStyleSheet(style)
         self.layout = qt.QGridLayout()
+        self.layout.setSizeConstraint(5)
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.setLayout(self.layout)
         self.setAutoFillBackground(True)
@@ -184,7 +186,7 @@ class ToolsActivation(qt.QGroupBox):
         tools_group.layout.addWidget(self.ml_checkbox)
         tools_group.layout.addWidget(self.merge_checkbox)
         tools_group.layout.addStretch()
-        tools_group.setFixedWidth(int(500 * vrb.ratio))
+        # tools_group.setFixedWidth(int(500 * vrb.ratio))
         tools_group.setAutoFillBackground(True)
         self.layout.addWidget(tools_group, 0, 3, Qt.AlignTop)
 
@@ -201,7 +203,6 @@ class ToolsActivation(qt.QGroupBox):
         self.meta_group.layout.addStretch()
         self.meta_group.setAutoFillBackground(True)
         self.layout.addWidget(self.meta_group, 1, 0, 1, 4)
-
 
         # connections
         self.draw_checkbox.stateChanged.connect(self.update_activation_tools)
@@ -244,7 +245,6 @@ class ToolsActivation(qt.QGroupBox):
 
     def update_activation_tools(self):
         if not self.loading:
-
             self.parent.dict_for_yaml["RUNSTEP"]["crop"] = self.crop_checkbox.isChecked()
             self.parent.dict_for_yaml["RUNSTEP"]["draw"] = self.draw_checkbox.isChecked()
             self.parent.layer_draw_crop.show_draw_params()
@@ -303,6 +303,8 @@ class LeaftoolParams(qt.QGroupBox):
         self.setStyleSheet(style)
         self.setAutoFillBackground(True)
         self.layout = qt.QGridLayout()
+        self.layout.setSizeConstraint(5)
+        self.setMaximumHeight(int(30*vrb.ratio))
         self.layout.setContentsMargins(10, 20, 10, 10)
         self.setLayout(self.layout)
         self.loading = False
@@ -389,6 +391,7 @@ class RunLeAFtool(qt.QWidget):
 
         # Layout Style
         self.layout = qt.QGridLayout()
+        self.layout.setSizeConstraint(5)
         self.layout.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
         self.setLayout(self.layout)
         self.setContentsMargins(5, 5, 5, 5)
@@ -411,8 +414,7 @@ class RunLeAFtool(qt.QWidget):
         self.preview_config = qt.QPlainTextEdit()
         self.preview_config = YAMLEditor()
         self.preview_config.setMinimumWidth(500)
-        self.preview_config.setMaximumWidth(int(1920))
-        self.preview_config.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
+        self.preview_config.setAutoFillBackground(True)
 
         # add path config file
         self.yaml_path = vrb.folderMacroInterface + "/LeAFtool/config.yaml"
@@ -590,8 +592,8 @@ class MainInterface(qt.QWidget):
     def __init__(self):
         super().__init__()
         # Layout Style
-        self.layout = qt.QGridLayout()
-        # self.layout.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        self.layout = qt.QVBoxLayout()
+        self.layout.setSizeConstraint(1)
         self.setLayout(self.layout)
         self.setContentsMargins(5, 5, 5, 5)
         self.setAutoFillBackground(True)
@@ -606,29 +608,21 @@ class MainInterface(qt.QWidget):
 
         self.logo_img = self.logo_img.scaledToHeight(60, mode=Qt.FastTransformation)
         self.logo_label.setPixmap(self.logo_img)
-        self.logo_label.setAlignment(Qt.AlignVCenter)
+        self.logo_label.setAlignment(Qt.AlignCenter)
         self.logo_label.setMaximumHeight(60)
 
-        # Initialize tab screen
+        # Initialize the 2 tab screen
         self.tabs = qt.QTabWidget()
-        self.tabs.setAutoFillBackground(True)
         self.tabs.setTabPosition(qt.QTabWidget.West)
+
+        # FIRST TAB PAGE
         self.tab1 = RunLeAFtool()
-        self.tab1.setAutoFillBackground(True)
-        #
-        # if self.tab1.leaftool:
-        #     csv_file = self.tab1.leaftool.analysis.csv_path_merge
-        #     path_images = self.tab1.layer_ml_merge.images_path
-        #     print(csv_file)
-        #     print(path_images)
 
+        # SECOND TAB PAGE
         self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
-        not_resize = self.csv_file.sizePolicy()
-        not_resize.setRetainSizeWhenHidden(True)
-        self.csv_file.setSizePolicy(not_resize)
-
         self.table_final = TableWidget()
-        # Layout Style
+        self.table_final.setAutoFillBackground(True)
+        # SECOND TAB Layout Style
         table_group = qt.QGroupBox()
         table_group.setTitle("Merge Results")
         table_group.setStyleSheet(style)
@@ -637,17 +631,18 @@ class MainInterface(qt.QWidget):
         table_group.setLayout(table_group.layout)
         table_group.layout.addWidget(self.csv_file)
         table_group.layout.addWidget(self.table_final)
-        table_group.setAutoFillBackground(True)
-        self.layout.addWidget(table_group, 0, 3, Qt.AlignCenter)
-
+        # table_group.setAutoFillBackground(True)
         self.tab2 = table_group
 
-        # Add tabs
+        # Add th 2 tables to object TABS
         self.tabs.addTab(self.tab1, "Run LeAFtool")
         self.tabs.addTab(self.tab2, "Explore Results")
-        self.layout.addWidget(self.logo_label, 0, 0, Qt.AlignCenter)
-        self.layout.addWidget(self.tabs, 1, 0, Qt.AlignLeft)
 
+        # add TABS to layout
+        self.layout.addWidget(self.logo_label, Qt.AlignCenter)
+        self.layout.addWidget(self.tabs)
+
+        # Edit connection
         self.csv_file.lineEditFile.textChanged.connect(self.update_table)
 
     def update_table(self):

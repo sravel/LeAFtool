@@ -176,10 +176,8 @@ class TableWidget(qt.QTableWidget):
         # self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setSortingEnabled(True)
         # self.loadDictionary()
-        # self.setMaximumHeight(self.rowHeight(0) * self.rowCount() + self.horizontalScrollBar().height())
         self.horizontalHeader().setStretchLastSection(True)
         self.setAlternatingRowColors(True)
-        # self.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Maximum)
 
         self.itemPressed.connect(self.cellClick)
         self.display()
