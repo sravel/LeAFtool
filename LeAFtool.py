@@ -80,9 +80,11 @@ class OutLog():
         elif "CRITICAL" in message.upper():
             self.edit.setTextColor(QtGui.QColor('darkred'))
         if "[" in message[:5]:
-            self.edit.append(message.rstrip()[5:-4])
+            self.edit.insertPlainText(f"{message.rstrip()[5:-4]}\n")
+        elif "\n" in message:
+            self.edit.insertPlainText(f"{message.rstrip()}")
         else:
-            self.edit.append(message.rstrip())
+            self.edit.insertPlainText(f"{message}\n")
         qt.QApplication.processEvents()
         # win = qt.QApplication.focusWindow()
         # print(win.title())
@@ -401,7 +403,7 @@ class RunLeAFtool(qt.QWidget):
 
         sys.stdout = OutLog(self.process, sys.stdout)
         sys.stderr = OutLog(self.process, sys.stderr)
-        #
+
         # sys.stdout = OutLog(self.process)
         # sys.stderr = OutLog(self.process)
 
@@ -465,8 +467,10 @@ class RunLeAFtool(qt.QWidget):
         cmd = f"python3 {Path(__file__).parent.joinpath('Leaftool_addons', 'cmd_LeAFtool.py')} -c {Path(self.yaml_path).resolve()}"
         self.running_process = subprocess.Popen("exec " + cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         with self.running_process:
-            for line in iter(self.running_process.stdout.readline, 'r'):
-                print(line.decode("utf-8").rstrip().rstrip())
+            for line in iter(self.running_process.stdout.readline, b''):
+                line = line.decode("utf-8").rstrip().rstrip()
+                if line:
+                    print(line)
         self.layer_leaftool_params.run.setChecked(False)
         del self.running_process
         self.running_process = None
@@ -593,7 +597,6 @@ class MainInterface(qt.QWidget):
         self.setAutoFillBackground(True)
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
-
 
         # Add title and logo
         self.setWindowTitle("LeAFtool")

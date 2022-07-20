@@ -650,11 +650,11 @@ class AnalysisImages:
             return filter(re.compile(pattern).match, strings)
 
         # glob scan file to analysis
-        full_files_filter = glob_re(r'^(.(?!(_mask_overlay)))*.tif$', os.listdir(self.basedir.as_posix()))
-
-        self.full_files = sorted([self.basedir.joinpath(path) for path in full_files_filter if "overlay" not in path])
+        full_files_filter = glob_re(r'^(.(?!(_overlay)))*.tif$', os.listdir(self.basedir.as_posix()))
+        self.full_files = sorted([self.basedir.joinpath(path) for path in full_files_filter])
         full_files_set = set(sorted(f"{path.stem}" for path in self.full_files))
-
+        # pp(f"full_files_filter: {list(full_files_filter)}")
+        # pp(f"full_files: {self.full_files}")
         # if force_rerun load already file run
         mask_overlay_files_filter = glob_re(r'.*_mask_overlay\.tif$', os.listdir(self.basedir.as_posix()))
         self.mask_overlay_files = sorted([self.basedir.joinpath(path) for path in mask_overlay_files_filter])
@@ -670,6 +670,7 @@ class AnalysisImages:
         else:
             self.files_to_run = sorted([file for file in self.full_files if f"{file.stem}" in basename_files_to_run])
         self.meta_info.check_correspondingML(files_list=self.files_to_run)
+        # pp(f"files_to_run: {self.files_to_run}")
 
     def run_ML(self):
         """loop to apply ML on all images"""
@@ -678,16 +679,17 @@ class AnalysisImages:
             self.logger.info(f"All files already run")
         elif not self.files_to_run and not self.full_files:
             raise FileNotFoundError(f"Not found file extension '.tif' on folder: {self.basedir.as_posix()}")
-        nb_scan = len(self.files_to_run)
+        nb_scan = len(self.full_files)
+        nb_scan_to_run = len(self.files_to_run)
+        nb_scan_runned = nb_scan-nb_scan_to_run
+        self.logger.info(f"There are {nb_scan_runned}/{nb_scan} scan file already analysis")
         for indice, img_file_path in enumerate(self.files_to_run, 1):
-            self.logger.info(f"Analyse scan file {indice}/{nb_scan}: {img_file_path.name}")
+            self.logger.info(f"Analyse scan file {indice}/{nb_scan_to_run}: {img_file_path.name}")
             self.analyse_leaves(image_path=img_file_path.as_posix())
         self.logger.info("~~~~~~~~~ END STEP MACHINE LEARNING ~~~~~~~~~")
-        # if self.files_to_run:
         self.logger.info("~~~~~~~~~ START MERGE CSV ~~~~~~~~~")
         self.__merge_CSV()
         self.logger.info("~~~~~~~~~ END MERGE CSV ~~~~~~~~~")
-
 
     def __merge_CSV(self, sep="\t", rm_merge=False):
         """merge all CSV file include on final folder
@@ -697,7 +699,6 @@ class AnalysisImages:
             rm_merge: if True, remove intermediate csv files Default: False
         """
         all_merge = []
-
         for label in self.all_ml_labels:
 
             if len(self.csv_dict_list[label]) > 1:
