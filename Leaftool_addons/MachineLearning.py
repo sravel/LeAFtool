@@ -202,6 +202,16 @@ class MachineLearningParams(qt.QGroupBox):
         self.merge_params.images_ext.currentIndexChanged.connect(self.update_ml_params)
         self.merge_params.rm_original.stateChanged.connect(self.update_ml_params)
 
+        # self.ml_params.comboBoxCalibration.focusInEvent(self.update_load)
+        # self.ml_params.comboBoxModel.focusInEvent(self.update_load)
+        # self.ml_params.comboBoxModel_classification.focusInEvent(self.update_load)
+
+    def update_load(self):
+        self.loading_models()
+        self.loading_models_classification()
+        self.loading_calibration()
+
+
     def loading_models(self):
         self.ml_params.comboBoxModel.clear()
         folder = vrb.folderPixelClassification

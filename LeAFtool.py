@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
 from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5 import QtGui, Qsci
+from PyQt5 import QtGui, Qsci, QtCore
 import PyQt5.QtWidgets as qt
 from PyQt5.QtGui import QIcon
 
@@ -149,7 +149,6 @@ class YAMLEditor(Qsci.QsciScintilla):
         # Show whitespace to help detect whitespace errors
         self.setWhitespaceVisibility(True)
         self.setIndentationGuides(True)
-
 
 
 class ToolsActivation(qt.QGroupBox):
@@ -484,6 +483,9 @@ class RunLeAFtool(qt.QWidget):
         self.layer_leaftool_params.save.clicked.connect(self.save_yaml)
         self.layer_leaftool_params.run.clicked.connect(self.change_run_state)
 
+        from PyQt5 import QtWidgets
+        QtWidgets.QApplication.instance().focusChanged.connect(self.on_focus_changed)
+
     def change_run_state(self):
         if self.layer_leaftool_params.run.isChecked():
             if self.save_yaml():
@@ -535,8 +537,14 @@ class RunLeAFtool(qt.QWidget):
         self.upload_all()
 
     @pyqtSlot("QWidget*", "QWidget*")
-    def on_focus_changed(self):
+    def on_focus_changed(self, old, now):
         self.update_all()
+        if self.layer_ml_merge.ml_params.comboBoxModel == now:
+            self.layer_ml_merge.loading_models()
+        elif self.layer_ml_merge.ml_params.comboBoxModel_classification == now:
+            self.layer_ml_merge.loading_models_classification()
+        elif self.layer_ml_merge.ml_params.comboBoxCalibration == now:
+            self.layer_ml_merge.loading_calibration()
 
     def update_all(self):
 
