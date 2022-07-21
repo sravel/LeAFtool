@@ -159,7 +159,7 @@ class MachineLearningParams(qt.QGroupBox):
         # Layout Style
         self.setTitle("Machine Learning and Merge Params")
         self.setStyleSheet(style)
-        self.setFixedSize(int(500 * vrb.ratio), int(330 * vrb.ratio))
+        self.setFixedSize(int(498 * vrb.ratio), int(330 * vrb.ratio))
         # self.setMinimumSize(int(450 * vrb.ratio), int(310 * vrb.ratio))
         self.layout = qt.QGridLayout()
         self.layout.setContentsMargins(15, 15, 15, 15)
@@ -266,7 +266,7 @@ class MachineLearningParams(qt.QGroupBox):
                     self.parent.dict_for_yaml["MERGE"]["extension"] = self.merge_params.images_ext.currentText()
                 self.parent.preview_config.setText(self.parent.export_use_yaml)
         except Exception as e:
-            print(e)
+            self.parent.logger.warning(e)
             pass
 
     def upload_ml_params(self):

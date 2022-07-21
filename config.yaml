@@ -1,41 +1,39 @@
-log_path: /home/sebastien/Documents/IPSDK/IMAGE/thomas/
+log_path:
 debug: true
 PLANT_MODEL: banana
-csv_file: /home/sebastien/Documents/IPSDK/IMAGE/thomas/IPSDK_inocTHOMAS_Rep1.csv
+csv_file:
 rename:
-- projet
-- position
 RUNSTEP:
-    draw: false
+    draw: true
     crop: true
     ML: true
     merge: true
 DRAWCROP:
-    images_path: /home/sebastien/Documents/IPSDK/IMAGE/thomas
-    out_cut_dir: /home/sebastien/Documents/IPSDK/IMAGE/thomas/crop
-    out_draw_dir: /home/sebastien/Documents/IPSDK/IMAGE/thomas/draw
+    images_path:
+    out_cut_dir:
+    out_draw_dir:
     extension: tif
-    x_pieces: 2
-    y_pieces: 3
-    top: 80
-    left: 120
-    right: 120
-    bottom: 80
+    x_pieces: 1
+    y_pieces: 1
+    top: 0
+    left: 0
+    right: 0
+    bottom: 0
     noise_remove: false
     numbering: Bottom
     force_rerun: false
 ML:
-    images_path: /home/sebastien/Documents/IPSDK/IMAGE/thomas/crop
-    model_name: test_thomas
-    model_name_classification: banana_trips
+    images_path:
+    model_name:
+    model_name_classification:
     split_ML: false
     calibration_name:
     small_object: 30
     alpha: 0.8
-    leaf_border: 80
+    leaf_border: 0
     noise_remove: false
-    force_rerun: true
+    force_rerun: false
     draw_ML_image: true
 MERGE:
-    rm_original: true
+    rm_original: false
     extension: jpg

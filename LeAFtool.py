@@ -2,9 +2,8 @@ import logging.config
 import sys
 import subprocess
 from pathlib import Path
-from datetime import timedelta
 from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
-from PyQt5.QtCore import QObject, pyqtSignal, QThread
+from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5 import QtGui, Qsci
 import PyQt5.QtWidgets as qt
 from PyQt5.QtGui import QIcon
@@ -630,6 +629,7 @@ class MainInterface(qt.QWidget):
     def __init__(self):
         super().__init__()
         # Layout Style
+        # self.setAttribute(Qt.WA_DeleteOnClose)
         self.layout = qt.QVBoxLayout()
         self.layout.setSizeConstraint(1)
         self.setLayout(self.layout)

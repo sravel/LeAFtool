@@ -1411,13 +1411,13 @@ class LeAFtool:
             'disable_existing_loggers': False,
             'formatters': {
                 'standard': {
-                    'format': f'%(asctime)s | {"% (name)-16s | %(funcName)-15s |" if self.debug else ""} %(levelname)-8s | %(message)s',
+                    'format': f'%(asctime)s | {"%(name)-16s | %(funcName)-15s |" if self.debug else ""} %(levelname)-8s | %(message)s',
                     # 'datefmt': '%Y-%m-%d %H:%M',
                     'datefmt': '%m-%d %H:%M',
                 },
                 'colored': {
                     '()': 'colorlog.ColoredFormatter',
-                    'format': f'%(log_color)s %(asctime)s | {"% (name)-16s | %(funcName)-15s |" if self.debug else ""} %(levelname)-8s | %(message)s',
+                    'format': f'%(log_color)s %(asctime)s | {"%(name)-16s | %(funcName)-15s |" if self.debug else ""} %(levelname)-8s | %(message)s',
                     'datefmt': '%m-%d %H:%M',
                 },
             },
