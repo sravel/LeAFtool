@@ -675,6 +675,8 @@ class AnalysisImages:
     def run_ML(self):
         """loop to apply ML on all images"""
         self.logger.info("~~~~~~~~~ START STEP MACHINE LEARNING ~~~~~~~~~")
+        if self.force_rerun:
+            self.logger.info(f"Force rerun analysis for all scans")
         if not self.files_to_run and self.full_files:
             self.logger.info(f"All files already run")
         elif not self.files_to_run and not self.full_files:
@@ -1409,14 +1411,14 @@ class LeAFtool:
             'disable_existing_loggers': False,
             'formatters': {
                 'standard': {
-                    'format': '%(asctime)s | %(name)-16s | %(funcName)-15s | %(levelname)-8s | %(message)s',
-                    'datefmt': '%Y-%m-%d %H:%M',
+                    'format': f'%(asctime)s | {"% (name)-16s | %(funcName)-15s |" if self.debug else ""} %(levelname)-8s | %(message)s',
+                    # 'datefmt': '%Y-%m-%d %H:%M',
+                    'datefmt': '%m-%d %H:%M',
                 },
                 'colored': {
                     '()': 'colorlog.ColoredFormatter',
-                    'format': "%(log_color)s %(asctime)s | %(name)-16s | %(funcName)-15s | %(levelname)-8s | %("
-                              "message)s",
-                    'datefmt': '%Y-%m-%d %H:%M',
+                    'format': f'%(log_color)s %(asctime)s | {"% (name)-16s | %(funcName)-15s |" if self.debug else ""} %(levelname)-8s | %(message)s',
+                    'datefmt': '%m-%d %H:%M',
                 },
             },
             'handlers': {
@@ -1836,7 +1838,6 @@ def welcome_args(version_arg, parser_arg):
             print(" - Intput Info:")
             for k, v in vars(parse_args).items():
                 print(f"\t - {k}: {v}")
-            print("\n")
             func()
             print(
                 f"""\nStop time: {datetime.now():%d-%m-%Y at %H:%M:%S}\tRun time: {datetime.now() - start_time}\n
@@ -1877,7 +1878,6 @@ def build_parser():
 
 @welcome_args(version, build_parser())
 def main():
-    from datetime import timedelta
     prog_args = build_parser().parse_args()
     #####################################################
     # EDIT ONLY THIS LINE TO CHANGE CONFIG FILE
@@ -1886,9 +1886,8 @@ def main():
     # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/config.yaml"
     # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/bug_marie/config.yaml"
     #####################################################
-    with Timer() as timer:
-        instance = LeAFtool(config_file=prog_args.config_file, debug=prog_args.debug)
-    instance.logger.info(f'Total time in seconds:{timedelta(seconds=timer.interval)}', extra={'className': 'LeAFtool'})
+
+    LeAFtool(config_file=prog_args.config_file, debug=prog_args.debug)
 
 
 if __name__ == '__main__':

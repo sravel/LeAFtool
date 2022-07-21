@@ -37,7 +37,6 @@ logging.config.dictConfig({
             'loggers': {
                 "": {
                     'handlers': ['stdout_handler'],
-                    'level': f'{"DEBUG"}',
                     'propagate': True,
                 },
             }
@@ -55,6 +54,43 @@ try:
 except:
     # traceback.print_exc(file=sys.stderr)
     pass
+
+
+class QTextEditLogger(logging.Handler, QObject):
+    appendPlainText = pyqtSignal(str)
+
+    def __init__(self, parent):
+        super().__init__()
+        QObject.__init__(self)
+        self.widget = qt.QPlainTextEdit(parent)
+        self.widget.setLineWrapMode(qt.QPlainTextEdit.NoWrap)
+        self.widget.setReadOnly(True)
+        self.widget.setStyleSheet('background-color:#4c4c4c;border:1px;border-style:solid;border-color:#999;')
+        # self.widget.setFixedWidth(int(1000 * vrb.ratio))
+        self.appendPlainText.connect(self.widget.appendPlainText)
+
+    def emit(self, record):
+        message = self.format(record)
+        if "DEBUG" in message.upper():
+            self.widget.setStyleSheet('background-color:#4c4c4c;border:1px;border-style:solid;border-color:#999;color: #ffffff;')
+        elif "INFO" in message.upper():
+            self.widget.setStyleSheet('background-color:#4c4c4c;border:1px;border-style:solid;border-color:#999;color: #48dada;')
+        elif "WARNING" in message.upper():
+            self.widget.setStyleSheet('background-color:#4c4c4c;border:1px;border-style:solid;border-color:#999;color: #f5f500;')
+        elif "ERROR" in message.upper():
+            self.widget.setStyleSheet('background-color:#4c4c4c;border:1px;border-style:solid;border-color:#999;color: #ff0000;')
+        elif "CRITICAL" in message.upper():
+            self.widget.setStyleSheet('background-color:#4c4c4c;border:1px;border-style:solid;border-color:#999;color: #aa0000;')
+        if "[" in message[:5]:
+            self.appendPlainText.emit(f"{message.rstrip()[5:-4]}")
+        elif "\n" in message:
+            self.appendPlainText.emit(f"{message.rstrip()}")
+        else:
+            self.appendPlainText.emit(f"{message}")
+        qt.QApplication.processEvents()
+
+    def clear(self):
+        self.widget.clear()
 
 
 class OutLog():
@@ -96,6 +132,7 @@ class OutLog():
 class YAMLEditor(Qsci.QsciScintilla):
     def __init__(self, parent=None):
         super().__init__(parent)
+
         self.setLexer(Qsci.QsciLexerYAML(self))
         self.setReadOnly(True)
         # Set the zoom factor, the factor is in points.
@@ -113,7 +150,7 @@ class YAMLEditor(Qsci.QsciScintilla):
         # Show whitespace to help detect whitespace errors
         self.setWhitespaceVisibility(True)
         self.setIndentationGuides(True)
-        self.setAutoFillBackground(True)
+
 
 
 class ToolsActivation(qt.QGroupBox):
@@ -128,10 +165,11 @@ class ToolsActivation(qt.QGroupBox):
         self.setTitle("Globals Parameters")
         self.setStyleSheet(style)
         self.layout = qt.QGridLayout()
-        self.layout.setSizeConstraint(5)
-        self.layout.setContentsMargins(10, 10, 10, 10)
+        # self.layout.setSizeConstraint(qt.QVBoxLayout.SetDefaultConstraint)
+        self.layout.setContentsMargins(10, 0, 10, 5)
         self.setLayout(self.layout)
-        self.setAutoFillBackground(True)
+        self.setFixedWidth(int(1000 * vrb.ratio))
+        # self.setAutoFillBackground(True)
 
         # Widgets
         self.plant_model_label = qt.QLabel()
@@ -165,7 +203,7 @@ class ToolsActivation(qt.QGroupBox):
         self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
 
         self.list_selection = TwoListSelection()
-        self.list_selection.setAutoFillBackground(True)
+        # self.list_selection.setAutoFillBackground(True)
         self.list_selection.setMaximumHeight(int(80 * vrb.ratio))
 
         # Position widgets
@@ -178,7 +216,7 @@ class ToolsActivation(qt.QGroupBox):
         tools_group.setTitle("Tools activation")
         tools_group.setStyleSheet(style)
         tools_group.layout = qt.QHBoxLayout()
-        tools_group.layout.setContentsMargins(5, 5, 5, 5)
+        tools_group.layout.setContentsMargins(5, 10, 0, 0)
         tools_group.setLayout(tools_group.layout)
         tools_group.layout.addStretch()
         tools_group.layout.addWidget(self.draw_checkbox)
@@ -186,8 +224,8 @@ class ToolsActivation(qt.QGroupBox):
         tools_group.layout.addWidget(self.ml_checkbox)
         tools_group.layout.addWidget(self.merge_checkbox)
         tools_group.layout.addStretch()
+        # tools_group.setAutoFillBackground(True)
         # tools_group.setFixedWidth(int(500 * vrb.ratio))
-        tools_group.setAutoFillBackground(True)
         self.layout.addWidget(tools_group, 0, 3, Qt.AlignTop)
 
         # Meta group
@@ -195,14 +233,14 @@ class ToolsActivation(qt.QGroupBox):
         self.meta_group.setTitle("Meta Infos")
         self.meta_group.setStyleSheet(style)
         self.meta_group.layout = qt.QVBoxLayout()
+        # self.meta_group.layout.setSizeConstraint(qt.QVBoxLayout.SetDefaultConstraint)
         self.meta_group.layout.setContentsMargins(10, 10, 10, 10)
         self.meta_group.setLayout(self.meta_group.layout)
-        self.meta_group.layout.addStretch()
         self.meta_group.layout.addWidget(self.csv_file)
         self.meta_group.layout.addWidget(self.list_selection)
-        self.meta_group.layout.addStretch()
-        self.meta_group.setAutoFillBackground(True)
-        self.layout.addWidget(self.meta_group, 1, 0, 1, 4)
+        self.meta_group.setFixedWidth(int(1000 * vrb.ratio))
+        # self.meta_group.setAutoFillBackground(True)
+        # self.layout.addWidget(self.meta_group, 1, 0, 1, 4)
 
         # connections
         self.draw_checkbox.stateChanged.connect(self.update_activation_tools)
@@ -301,12 +339,13 @@ class LeaftoolParams(qt.QGroupBox):
         # Layout Style
         self.setTitle("LeAFtool params")
         self.setStyleSheet(style)
-        self.setAutoFillBackground(True)
+        # self.setAutoFillBackground(True)
         self.layout = qt.QGridLayout()
-        self.layout.setSizeConstraint(5)
-        self.setMaximumHeight(int(30*vrb.ratio))
-        self.layout.setContentsMargins(10, 20, 10, 10)
+        # self.layout.setSizeConstraint(qt.QVBoxLayout.SetMinAndMaxSize)
+        self.setMaximumHeight(int(80*vrb.ratio))
+        self.layout.setContentsMargins(10, 10, 10, 10)
         self.setLayout(self.layout)
+        self.setFixedWidth(int(1000 * vrb.ratio))
         self.loading = False
 
         # Widgets
@@ -391,24 +430,18 @@ class RunLeAFtool(qt.QWidget):
 
         # Layout Style
         self.layout = qt.QGridLayout()
-        self.layout.setSizeConstraint(5)
-        self.layout.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        self.layout.setSizeConstraint(qt.QVBoxLayout.SetMinAndMaxSize)
         self.setLayout(self.layout)
-        self.setContentsMargins(5, 5, 5, 5)
+        self.setContentsMargins(10, 10, 10, 10)
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
-        self.setAutoFillBackground(True)
+
 
         # Create the text output widget.
-        self.process = qt.QTextEdit(self, readOnly=False)
-        self.process.setMinimumHeight(100)
-        self.process.setAutoFillBackground(True)
+        self.process = QTextEditLogger(self)
+        self.logger.addHandler(self.process)
+        self.logger.setLevel(logging.DEBUG)
 
-        sys.stdout = OutLog(self.process, sys.stdout)
-        sys.stderr = OutLog(self.process, sys.stderr)
-
-        # sys.stdout = OutLog(self.process)
-        # sys.stderr = OutLog(self.process)
 
         # add preview of yaml file
         self.preview_config = qt.QPlainTextEdit()
@@ -435,12 +468,17 @@ class RunLeAFtool(qt.QWidget):
         self.layer_draw_crop.setSizePolicy(not_resize)
 
         self.layout.addWidget(self.layer_tools, 0, 0, 1, 2)
-        self.layout.addWidget(self.preview_config, 0, 3, 4, 1)
-        self.layout.addWidget(self.layer_draw_crop, 1, 0)
-        self.layout.addWidget(self.layer_ml_merge, 1, 1)
-        self.layout.addWidget(self.layer_leaftool_params, 2, 0, 1, 2)
-        self.layout.addWidget(self.process, 3, 0, 1, 2)
+        self.layout.addWidget(self.layer_tools.meta_group, 1, 0, 1, 2)
+        self.layout.addWidget(self.preview_config, 0, 3, 5, 1)
+        self.layout.addWidget(self.layer_draw_crop, 2, 0)
+        self.layout.addWidget(self.layer_ml_merge, 2, 1)
+        self.layout.addWidget(self.layer_leaftool_params, 3, 0, 1, 2)
+        self.layout.addWidget(self.process.widget, 4, 0, 1, 2)
+        not_resize = self.sizePolicy()
+        not_resize.setRetainSizeWhenHidden(True)
+        self.setSizePolicy(not_resize)
         self.load_yaml()
+        # self.setAutoFillBackground(True)
 
         ## Layer leaftool params connection
         self.layer_leaftool_params.upload.clicked.connect(self.upload_yaml)
@@ -472,7 +510,7 @@ class RunLeAFtool(qt.QWidget):
             for line in iter(self.running_process.stdout.readline, b''):
                 line = line.decode("utf-8").rstrip().rstrip()
                 if line:
-                    print(line)
+                    self.logger.info(line)
         self.layer_leaftool_params.run.setChecked(False)
         del self.running_process
         self.running_process = None
@@ -480,11 +518,11 @@ class RunLeAFtool(qt.QWidget):
 
     def abort_workers(self):
         if self.running_process:
-            print('Asking to abort')
+            self.logger.info('Asking to abort')
             self.running_process.kill()
             del self.running_process
             self.running_process = None
-            print("kill Thread success")
+            self.logger.info("kill Thread success")
 
     def load_yaml(self):
         with open(self.yaml_path, "r") as file_config:
@@ -599,6 +637,7 @@ class MainInterface(qt.QWidget):
         self.setAutoFillBackground(True)
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
+        # self.setWidgetResizable(True)
 
         # Add title and logo
         self.setWindowTitle("LeAFtool")
@@ -688,7 +727,7 @@ if __name__ == '__main__':
 
     # foo = FileSelectorLeaftool("test")
     # foo = DataExplorer()
-    # foo = DrawCropParams(parent=RunLeAFtool)
+    # foo = ToolsActivation(parent=RunLeAFtool)
     foo = MainInterface()
     # foo = RunLeAFtool()
     # foo = NumberLineEditLabel(constraint="Natural", text="0", label="Y pieces:")

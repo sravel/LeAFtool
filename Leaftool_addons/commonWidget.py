@@ -17,8 +17,8 @@ import DatabaseFunction as Dfct
 
 from pathlib import Path
 
-style = 'QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(6, 115, ' \
-        '186)} QGroupBox {font: bold; border: 1px solid gray; margin-top: 12 px}'
+style = 'QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(33, 171, ' \
+        '38)} QGroupBox {font: bold; border: 1px solid gray; margin-top:12 px; margin-bottom: 0px}'
 allow_ext = ["tif", "tiff", "TIF", "TIFF", "Tif", "Tiff", "im6", "IM6", "jpg", "JPG", "PNG", "png", "BMP", "bmp"]
 
 
@@ -103,7 +103,7 @@ class FileSelectorLeaftool(qt.QGroupBox):
 
     def openQDialog(self):
         dlg = qt.QFileDialog()
-        # dlg.setOption(dlg.DontUseNativeDialog, False)
+        dlg.setOption(dlg.DontUseNativeDialog, True)
         # dlg.setOption(dlg.HideNameFilterDetails, False)
         # dlg.setFilter(dlg.filter() | QDir.Hidden)
         defaultFolder = return_default_folder()
@@ -230,8 +230,11 @@ class TableWidget(qt.QTableWidget):
             vrb.mainWindow.widgetLabelImage.clearAll()
 
             rowValue, columnValue = cellItem.row(), cellItem.column()
-            text = self.item(rowValue, self.indice_crop_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
-            if self.indice_class_name:
+            text = self.item(rowValue, self.indice_crop_name).text() # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
+            header = self.horizontalHeaderItem(cellItem.column()).text()
+            if "_" in header:
+                class_label = header.split("_")[0]
+            elif self.indice_class_name:
                 class_label = self.item(rowValue, self.indice_class_name).text()
             else:
                 class_label = "lesion"
@@ -257,7 +260,7 @@ class TableWidget(qt.QTableWidget):
                             if label.name == text:
                                 vrb.mainWindow.changeCurrentXmlElement(label)
                                 vrb.mainWindow.widgetImage.groupBoxOverlay.checkBoxOverlay.setChecked(True)
-                                vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText("Result_lesion")
+                                vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText(f"Result_{class_label}")
                     except:
                         pass
 
@@ -303,8 +306,9 @@ class TwoListSelection(qt.QWidget):
         self.mInput = qt.QListWidget()
         self.mOuput = qt.QListWidget()
 
-        self.label = qt.QLabel("Rename_order:")
-        self.label.setMinimumWidth(int(83 * vrb.ratio))
+        self.label = qt.QLabel("Rename order:")
+        self.label.setWordWrap(True)
+        self.label.setFixedWidth(int(83 * vrb.ratio))
         self.mButtonToSelected = qt.QPushButton(">>")
         self.mBtnMoveToAvailable = qt.QPushButton(">")
         self.mBtnMoveToSelected = qt.QPushButton("<")
@@ -317,6 +321,7 @@ class TwoListSelection(qt.QWidget):
         vlay.addWidget(self.mBtnMoveToSelected)
         vlay.addWidget(self.mButtonToAvailable)
         vlay.addStretch()
+        vlay.setContentsMargins(0, 0, 0, 0)
 
         self.mBtnUp = qt.QPushButton("Up")
         self.mBtnDown = qt.QPushButton("Down")
@@ -326,12 +331,14 @@ class TwoListSelection(qt.QWidget):
         vlay2.addWidget(self.mBtnUp)
         vlay2.addWidget(self.mBtnDown)
         vlay2.addStretch()
+        vlay2.setContentsMargins(0, 0, 0, 0)
 
         lay.addWidget(self.label, 0, 0)
         lay.addWidget(self.mInput, 0, 1)
         lay.addLayout(vlay, 0, 2)
         lay.addWidget(self.mOuput, 0, 3)
         lay.addLayout(vlay2, 0, 4)
+        lay.setContentsMargins(0, 0, 0, 0)
 
         self.update_buttons_status()
         self.connections()
@@ -387,10 +394,12 @@ class TwoListSelection(qt.QWidget):
         self.mOuput.setCurrentRow(row + 1)
 
     def add_left_elements(self, items):
-        self.mInput.addItems(items)
+        if items:
+            self.mInput.addItems(items)
 
     def add_right_elements(self, items):
-        self.mOuput.addItems(items)
+        if items:
+            self.mOuput.addItems(items)
 
     def get_left_elements(self):
         return [self.mInput.item(i).text() for i in range(self.mInput.count())]

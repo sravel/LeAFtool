@@ -13,7 +13,7 @@ class DrawCropMargin(qt.QGroupBox):
         self.setStyleSheet(style)
         self.setFixedSize(int(250 * vrb.ratio), int(110 * vrb.ratio))
         self.layout = qt.QGridLayout()
-        self.layout.setContentsMargins(10, 15, 10, 15)
+        self.layout.setContentsMargins(5, 10, 5, 10)
         self.setLayout(self.layout)
 
         # Widgets
@@ -36,9 +36,9 @@ class DrawCropCutPart(qt.QGroupBox):
         # Layout Style
         self.setTitle("Cut part")
         self.setStyleSheet(style)
-        self.setFixedSize(int(160 * vrb.ratio), int(110 * vrb.ratio))
+        self.setFixedSize(int(140 * vrb.ratio), int(110 * vrb.ratio))
         self.layout = qt.QGridLayout()
-        self.layout.setContentsMargins(10, 15, 10, 15)
+        self.layout.setContentsMargins(5, 10, 5, 10)
         self.setLayout(self.layout)
 
         # Widgets
@@ -62,7 +62,7 @@ class DrawCropParams(qt.QGroupBox):
         # Layout Style
         self.setTitle("Draw or/and Crop options")
         self.setStyleSheet(style)
-        self.setFixedSize(int(460 * vrb.ratio), int(330 * vrb.ratio))
+        self.setFixedSize(int(498 * vrb.ratio), int(330 * vrb.ratio))
         self.layout = qt.QGridLayout()
         self.layout.setContentsMargins(10, 20, 10, 10)
         self.setLayout(self.layout)
@@ -146,9 +146,9 @@ class DrawCropParams(qt.QGroupBox):
             self.parent.dict_for_yaml["DRAWCROP"]["out_draw_dir"] = self.out_draw_dir.lineEditFile.text()
             self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"] = self.out_cut_dir.lineEditFile.text()
             self.parent.dict_for_yaml["log_path"] = self.out_cut_dir.lineEditFile.text()
-            if self.parent.dict_for_yaml["RUNSTEP"]["ML"] or self.parent.dict_for_yaml["RUNSTEP"]["merge"]:
+            if (self.parent.dict_for_yaml["RUNSTEP"]["ML"] or self.parent.dict_for_yaml["RUNSTEP"]["merge"]) and self.out_cut_dir.lineEditFile.text() != "":
                 self.parent.dict_for_yaml["ML"]["images_path"] = self.out_cut_dir.lineEditFile.text()
-            self.parent.layer_ml_merge.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"])
+                self.parent.layer_ml_merge.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"])
             self.parent.dict_for_yaml["DRAWCROP"]["x_pieces"] = int(self.cut_part.x_pieces.lineEdit.text())
             self.parent.dict_for_yaml["DRAWCROP"]["y_pieces"] = int(self.cut_part.y_pieces.lineEdit.text())
             self.parent.dict_for_yaml["DRAWCROP"]["left"] = int(self.margin.left.lineEdit.text())
