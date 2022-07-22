@@ -212,7 +212,6 @@ class MetaInfo:
 
     def check_corresponding(self, files_list):
         """test if all scan file have name on csv file"""
-        # try:
         not_found_list = []
         for img_file in files_list:
             basename = img_file.stem
@@ -221,11 +220,8 @@ class MetaInfo:
         if not_found_list:
             self.exit_status = False
             txt_list = '\n - '.join([""] + not_found_list)
-            raise NameError(f"Not found corresponding name for scan:{txt_list}")
+            raise NameError(f"Not found corresponding MetaInfo for scan:{txt_list}")
         self.exit_status = True
-        # except NameError as e:
-        #     print(e)
-        #     self.logger.error(e)
 
     def __build_meta_to_rename(self):
         if not self.rename_to_df:
@@ -239,29 +235,25 @@ class MetaInfo:
     def build_dataframe_with_crop_name(self):
         df_list = [v for k, v in self.rename_to_df.items()]
         self.dataframe_with_crop_name = pd.concat(df_list, axis=0, ignore_index=True).reset_index(drop=True)
-        # self.dataframe_with_crop_name = pd.concat([pd.concat(v) for k,v in self.rename_to_df.items()])
 
     def check_correspondingML(self, files_list):
         """test if all scan file have name on csv file"""
-        # TODO: add test
-        pass
-        # try:
-        # not_found_list = []
-        # for img_file in files_list:
-        #     basename = img_file.stem
-        #     if basename not in self.__list_filenames:
-        #         not_found_list.append(img_file.name)
-        # if not_found_list:
-        #     self.exit_status = False
-        #     txt_list = '\n - '.join([""]+not_found_list)
-        #     raise NameError(f"Not found corresponding name for scan:{txt_list}")
-        # self.exit_status = True
-        # # except NameError as e:
-        # #     print(e)
-        # #     self.logger.error(e)
+        not_found_list = []
+        for img_file in files_list:
+            basename = img_file.stem
+            if not self.rename_to_meta(basename):
+                not_found_list.append(img_file.name)
+        if not_found_list:
+            self.exit_status = False
+            txt_list = '\n - '.join([""] + not_found_list)
+            raise NameError(f"Not found corresponding MetaInfo for scan:{txt_list}")
+        self.exit_status = True
 
     def rename_to_meta(self, scan_name):
-        return self.rename_to_df[scan_name]
+        try:
+            return self.rename_to_df[scan_name].iloc[0][self.header[0]]
+        except KeyError:
+            return None
 
     def meta_to_crop_rename(self, scan_name, pos):
         if (scan_name, pos) in self.__dict_names_pos:
@@ -270,8 +262,8 @@ class MetaInfo:
             return None
 
     def __repr__(self):
-        # return f"{self.__class__}({pp(self.__dict__)})"
-        return f"{self.dataframe_with_crop_name}"
+        return f"{self.__class__}({pp(self.__dict__)})"
+        # return f"{self.dataframe_with_crop_name}"
 
 
 class CropAndCutImages:
@@ -501,7 +493,7 @@ class AnalysisImages:
     def __init__(self, scan_folder, model_name, csv_file, rename, calibration_name=None, small_object=100, border=0,
                  alpha=0.5,
                  noise_remove=False, split_ML=False, force_rerun=True, draw_ML_image=False, plant_model=None,
-                 model_name_classification=None):
+                 model_name_classification=None, color_lesion_individual=False):
         """
         Args:
             scan_folder (:obj:`str`): Path to scan images
@@ -520,6 +512,7 @@ class AnalysisImages:
             draw_ML_image (:obj:`boolean`): If True, add rectangle overlay corresponding to image use for apply ML
             Default: False
             plant_model (:obj:`boolean`): The plant model (rice or banana)
+            color_lesion_individual (:obj:`boolean`): If true make random color for separated lesion else use model color for all Default: True
         """
         self.logger = logging.getLogger('AnalysisImages')
         self.plant_model = plant_model
@@ -547,6 +540,7 @@ class AnalysisImages:
         self.table_leaves = []
         self.draw_ML_image = draw_ML_image
         self.model_name_classification = model_name_classification
+        self.color_lesion_individual = color_lesion_individual
 
         # TODO add csv_path_merge to user argument ?
         self.csv_path_merge = self.basedir.joinpath("global-merge-ALL.csv").as_posix()
@@ -669,6 +663,7 @@ class AnalysisImages:
             self.files_to_run = self.full_files
         else:
             self.files_to_run = sorted([file for file in self.full_files if f"{file.stem}" in basename_files_to_run])
+        # pp(self.meta_info)
         self.meta_info.check_correspondingML(files_list=self.files_to_run)
         # pp(f"files_to_run: {self.files_to_run}")
 
@@ -858,7 +853,10 @@ class AnalysisImages:
             color_label_to_RGB_Uint16blend[i - 1] = colors_UINT16  # -1 car pas de leaf
         color_label_to_RGB_Uint16blend[0] = [0, 0, 0]
         # Count the number of labels
-        nbLabels = glbmsr.statsMsr2d(ov).max
+        if self.color_lesion_individual:
+            nbLabels = glbmsr.statsMsr2d(ov).max
+        else:
+            nbLabels = 1
 
         # Create 3 random LUTs (one per channel)
         randValues = np.random.rand(3, int(nbLabels + 1)) * 65535
@@ -879,6 +877,7 @@ class AnalysisImages:
             plan = PyIPSDK.extractPlan(0, c, 0, overlayImage)
             itrans.lutTransform2dImg(ov, colorLut[c], plan)
 
+        # ui.displayImg(overlayImage, pause=True)
         # Blending
         blend = arithm.blendImgImg(self.full_leaves_ipsdk_img, overlayImage, 1 - self.alpha)
         # change alpha blending see https://fr.wikipedia.org/wiki/Alpha_blending
@@ -1315,6 +1314,7 @@ class Leaf:
                         split_mask_separated_filter = split_mask_separated
                     # ui.displayImg(split_mask_separated_filter, pause=True, title="split_mask_separated_filter on
                     # LOOP")
+                    self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
                     self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
                 else:
                     split_mask = bin.thresholdImg(all_masks, i, i)
@@ -1640,7 +1640,10 @@ class LeAFtool:
                                                                                                        key="split_ML")),
                                            plant_model=self.plant_model,
                                            model_name_classification=self.get_config_value(section="ML",
-                                                                                           key="model_name_classification")
+                                                                                           key="model_name_classification"),
+                                           color_lesion_individual=self.__var_2_bool("ML", "color_lesion_individual",
+                                                                      to_convert=self.get_config_value(section="ML",
+                                                                                                       key="color_lesion_individual"))
                                            )
             if self.config["RUNSTEP"]["ML"]:
                 self.analysis.run_ML()

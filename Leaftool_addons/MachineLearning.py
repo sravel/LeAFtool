@@ -58,22 +58,27 @@ class MLParams(qt.QGroupBox):
 
         self.draw_ML_image = qt.QCheckBox()
         self.draw_ML_image.setText("Draw ML")
-        self.draw_ML_image.setFixedSize(int(120 * vrb.ratio), int(30 * vrb.ratio))
+        self.draw_ML_image.setFixedSize(int(80 * vrb.ratio), int(30 * vrb.ratio))
+
+        self.color_lesion_individual = qt.QCheckBox()
+        self.color_lesion_individual.setText("color lesion individual")
+        self.color_lesion_individual.setFixedSize(int(150 * vrb.ratio), int(30 * vrb.ratio))
 
         # Position Widgets
         self.layout.addWidget(self.label_ML, 0, 0, 1, 1, Qt.AlignLeft)
         self.layout.addWidget(self.comboBoxModel, 0, 1, 1, 1, Qt.AlignRight)
+        self.layout.addWidget(self.split_ML, 0, 2, Qt.AlignRight)
         self.layout.addWidget(self.label_ML_classification, 1, 0, 1, 1, Qt.AlignLeft)
         self.layout.addWidget(self.comboBoxModel_classification, 1, 1, 1, 1, Qt.AlignRight)
-        self.layout.addWidget(self.split_ML, 0, 2, Qt.AlignRight)
+        self.layout.addWidget(self.draw_ML_image, 1, 2, Qt.AlignRight)
         self.layout.addWidget(self.labelUserCalibration, 2, 0, 1, 1, Qt.AlignLeft)
         self.layout.addWidget(self.comboBoxCalibration, 2, 1, 1, 1, Qt.AlignRight)
         self.layout.addWidget(self.small_object, 3, 0, 1, 1, (Qt.AlignLeft | Qt.AlignVCenter))
         self.layout.addWidget(self.alpha, 3, 1, (Qt.AlignCenter | Qt.AlignVCenter))
         self.layout.addWidget(self.leaf_border, 3, 2, 1, 1, (Qt.AlignRight | Qt.AlignVCenter))
-        self.layout.addWidget(self.noise_remove, 4, 0, (Qt.AlignLeft | Qt.AlignVCenter))
-        self.layout.addWidget(self.force_rerun, 4, 1, (Qt.AlignLeft | Qt.AlignVCenter))
-        self.layout.addWidget(self.draw_ML_image, 4, 2, (Qt.AlignLeft | Qt.AlignVCenter))
+        self.layout.addWidget(self.color_lesion_individual, 4, 0, (Qt.AlignLeft | Qt.AlignVCenter))
+        self.layout.addWidget(self.noise_remove, 4, 1, (Qt.AlignLeft | Qt.AlignVCenter))
+        self.layout.addWidget(self.force_rerun, 4, 2, (Qt.AlignLeft | Qt.AlignVCenter))
 
 
 class MergeParams(qt.QGroupBox):
@@ -147,7 +152,6 @@ class Calibration(qt.QGroupBox):
             self.calibration_avail.append(Dfct.childText(child, "Name"))
 
 
-
 class MachineLearningParams(qt.QGroupBox):
     """params for machine learning option"""
 
@@ -198,6 +202,7 @@ class MachineLearningParams(qt.QGroupBox):
         self.ml_params.force_rerun.stateChanged.connect(self.update_ml_params)
         self.ml_params.draw_ML_image.stateChanged.connect(self.update_ml_params)
         self.ml_params.split_ML.stateChanged.connect(self.update_ml_params)
+        self.ml_params.color_lesion_individual.stateChanged.connect(self.update_ml_params)
         #Merge
         self.merge_params.images_ext.currentIndexChanged.connect(self.update_ml_params)
         self.merge_params.rm_original.stateChanged.connect(self.update_ml_params)
@@ -210,7 +215,6 @@ class MachineLearningParams(qt.QGroupBox):
         self.loading_models()
         self.loading_models_classification()
         self.loading_calibration()
-
 
     def loading_models(self):
         self.ml_params.comboBoxModel.clear()
@@ -271,6 +275,7 @@ class MachineLearningParams(qt.QGroupBox):
                 self.parent.dict_for_yaml["ML"]["force_rerun"] = bool(self.ml_params.force_rerun.isChecked())
                 self.parent.dict_for_yaml["ML"]["draw_ML_image"] = bool(self.ml_params.draw_ML_image.isChecked())
                 self.parent.dict_for_yaml["ML"]["split_ML"] = bool(self.ml_params.split_ML.isChecked())
+                self.parent.dict_for_yaml["ML"]["color_lesion_individual"] = bool(self.ml_params.color_lesion_individual.isChecked())
                 if self.parent.dict_for_yaml["RUNSTEP"]["merge"]:
                     self.parent.dict_for_yaml["MERGE"]["rm_original"] = bool(self.merge_params.rm_original.isChecked())
                     self.parent.dict_for_yaml["MERGE"]["extension"] = self.merge_params.images_ext.currentText()
@@ -302,12 +307,12 @@ class MachineLearningParams(qt.QGroupBox):
             self.ml_params.noise_remove.setChecked(bool(self.parent.dict_for_yaml["ML"]["noise_remove"]))
             self.ml_params.force_rerun.setChecked(bool(self.parent.dict_for_yaml["ML"]["force_rerun"]))
             self.ml_params.draw_ML_image.setChecked(bool(self.parent.dict_for_yaml["ML"]["draw_ML_image"]))
+            self.ml_params.color_lesion_individual.setChecked(bool(self.parent.dict_for_yaml["ML"]["color_lesion_individual"]))
             self.loading = False
         if self.parent.dict_for_yaml["RUNSTEP"]["merge"]:
             self.merge_params.rm_original.setChecked(bool(self.parent.dict_for_yaml["MERGE"]["rm_original"]))
             self.merge_params.images_ext.addItem(self.parent.dict_for_yaml["MERGE"]["extension"])
             self.merge_params.images_ext.setCurrentText(self.parent.dict_for_yaml["MERGE"]["extension"])
-
 
     def show_ml_merge_params(self):
         if self.parent.layer_tools.ml_checkbox.isChecked() or self.parent.layer_tools.merge_checkbox.isChecked():
@@ -328,7 +333,6 @@ if __name__ == '__main__':
 
     sys._excepthook = sys.excepthook
 
-
     def exception_hook(exctype, value, traceback):
         print(exctype, value, traceback)
         sys._excepthook(exctype, value, traceback)
@@ -337,8 +341,8 @@ if __name__ == '__main__':
 
     sys.excepthook = exception_hook
 
-    foo = MachineLearningParams(parent=None)
+    # foo = MachineLearningParams(parent=None)
     foo = MLParams()
-    # foo.showMaximized()
+    foo.showMaximized()
     foo.show()
     app.exec_()

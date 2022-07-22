@@ -30,6 +30,7 @@ ML:
     calibration_name:
     small_object: 30
     alpha: 0.8
+    color_lesion_individual: true
     leaf_border: 0
     noise_remove: false
     force_rerun: false
