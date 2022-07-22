@@ -165,24 +165,28 @@ class DrawCropParams(qt.QGroupBox):
         #     pass
 
     def upload_draw_crop_params(self):
-        self.loading = True
-        if self.parent.dict_for_yaml["RUNSTEP"]["draw"] or self.parent.dict_for_yaml["RUNSTEP"]["crop"]:
-            self.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["images_path"])
-            self.out_draw_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_draw_dir"])
-            self.out_cut_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"])
-            self.cut_part.x_pieces.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["x_pieces"]))
-            self.cut_part.y_pieces.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["y_pieces"]))
-            self.margin.left.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["left"]))
-            self.margin.top.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["top"]))
-            self.margin.right.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["right"]))
-            self.margin.bottom.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["bottom"]))
-            self.noise_remove.setChecked(bool(self.parent.dict_for_yaml["DRAWCROP"]["noise_remove"]))
-            self.force_rerun.setChecked(bool(self.parent.dict_for_yaml["DRAWCROP"]["force_rerun"]))
-            self.images_ext.addItem(self.parent.dict_for_yaml["DRAWCROP"]["extension"])
-            self.images_ext.setCurrentText(self.parent.dict_for_yaml["DRAWCROP"]["extension"])
-            self.update_ext()
-        self.show_draw_params()
-        self.loading = False
+        try:
+            self.loading = True
+            if self.parent.dict_for_yaml["RUNSTEP"]["draw"] or self.parent.dict_for_yaml["RUNSTEP"]["crop"]:
+                self.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["images_path"])
+                self.out_draw_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_draw_dir"])
+                self.out_cut_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAWCROP"]["out_cut_dir"])
+                self.cut_part.x_pieces.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["x_pieces"]))
+                self.cut_part.y_pieces.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["y_pieces"]))
+                self.margin.left.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["left"]))
+                self.margin.top.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["top"]))
+                self.margin.right.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["right"]))
+                self.margin.bottom.lineEdit.setText(str(self.parent.dict_for_yaml["DRAWCROP"]["bottom"]))
+                self.noise_remove.setChecked(bool(self.parent.dict_for_yaml["DRAWCROP"]["noise_remove"]))
+                self.force_rerun.setChecked(bool(self.parent.dict_for_yaml["DRAWCROP"]["force_rerun"]))
+                self.images_ext.addItem(self.parent.dict_for_yaml["DRAWCROP"]["extension"])
+                self.images_ext.setCurrentText(self.parent.dict_for_yaml["DRAWCROP"]["extension"])
+                self.update_ext()
+            self.show_draw_params()
+            self.loading = False
+        except KeyError as e:
+            self.parent.logger.error(f"ERROR: Key {e} is not found on file")
+            self.parent.dict_for_yaml = self.parent.dict_backup
 
     def show_draw_params(self):
         if self.parent.layer_tools.draw_checkbox.isChecked() or self.parent.layer_tools.crop_checkbox.isChecked():

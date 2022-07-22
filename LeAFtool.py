@@ -92,42 +92,6 @@ class QTextEditLogger(logging.Handler, QObject):
         self.widget.clear()
 
 
-class OutLog():
-    def __init__(self, edit, out=None):
-        """(edit, out=None, color=None) -> can write stdout, stderr to a
-        QTextEdit.
-        edit = QTextEdit
-        out = alternate stream ( can be the original sys.stdout )
-        """
-        self.edit = edit
-        self.out = out
-        self.edit.setStyleSheet('background-color: #707070;')
-
-    def write(self, message):
-        if "DEBUG" in message.upper():
-            self.edit.setTextColor(QtGui.QColor('white'))
-        elif "INFO" in message.upper():
-            self.edit.setTextColor(QtGui.QColor('cyan'))
-        elif "WARNING" in message.upper():
-            self.edit.setTextColor(QtGui.QColor('yellow'))
-        elif "ERROR" in message.upper():
-            self.edit.setTextColor(QtGui.QColor('red'))
-        elif "CRITICAL" in message.upper():
-            self.edit.setTextColor(QtGui.QColor('darkred'))
-        if "[" in message[:5]:
-            self.edit.insertPlainText(f"{message.rstrip()[5:-4]}\n")
-        elif "\n" in message:
-            self.edit.insertPlainText(f"{message.rstrip()}")
-        else:
-            self.edit.insertPlainText(f"{message}\n")
-        qt.QApplication.processEvents()
-        # win = qt.QApplication.focusWindow()
-        # print(win.title())
-
-        if self.out:
-            self.out.write(message)
-
-
 class YAMLEditor(Qsci.QsciScintilla):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -263,21 +227,24 @@ class ToolsActivation(qt.QGroupBox):
         self.meta_group.setVisible(self.show_meta_checkbox.isChecked())
 
     def upload_activation_tools(self):
-
-        self.loading = True
-        if self.parent.dict_for_yaml["PLANT_MODEL"] not in ["banana", "rice"]:
-            self.parent.logger.warning(
-                f"Warning: arguments PLANT_MODEL:'{self.parent.dict_for_yaml['PLANT_MODEL']}' is not allow, please use only 'banana' or 'rice'")
-        else:
-            self.plant_model.setCurrentText(self.parent.dict_for_yaml["PLANT_MODEL"])
-        self.draw_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["draw"]))
-        self.crop_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["crop"]))
-        self.ml_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["ML"]))
-        self.merge_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["merge"]))
-        self.csv_file.lineEditFile.setText(self.parent.dict_for_yaml["csv_file"])
-        self.list_selection.clean_list()
-        self.list_selection.add_right_elements(self.parent.dict_for_yaml["rename"])
-        self.loading = False
+        try:
+            self.loading = True
+            if self.parent.dict_for_yaml["PLANT_MODEL"] not in ["banana", "rice"]:
+                self.parent.logger.warning(
+                    f"Warning: arguments PLANT_MODEL:'{self.parent.dict_for_yaml['PLANT_MODEL']}' is not allow, please use only 'banana' or 'rice'")
+            else:
+                self.plant_model.setCurrentText(self.parent.dict_for_yaml["PLANT_MODEL"])
+            self.draw_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["draw"]))
+            self.crop_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["crop"]))
+            self.ml_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["ML"]))
+            self.merge_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["merge"]))
+            self.csv_file.lineEditFile.setText(self.parent.dict_for_yaml["csv_file"])
+            self.list_selection.clean_list()
+            self.list_selection.add_right_elements(self.parent.dict_for_yaml["rename"])
+            self.loading = False
+        except KeyError as e:
+            self.parent.logger.error(f"ERROR: Key {e} is not found on file")
+            self.parent.dict_for_yaml = self.parent.dict_backup
 
     def update_activation_tools(self):
         if not self.loading:
@@ -405,9 +372,9 @@ class LeaftoolParams(qt.QGroupBox):
             if not self.loading:
                 self.parent.dict_for_yaml["debug"] = bool(self.debug_checkbox.isChecked())
                 self.parent.preview_config.setText(self.parent.export_use_yaml)
-        except Exception as e:
-            print(f"WARNING update_debug: {e}")
-            pass
+        except KeyError as e:
+            self.parent.logger.error(f"ERROR: Key {e} is not found on file")
+            self.parent.dict_for_yaml = self.parent.dict_backup
 
     def upload_debug(self):
         self.loading = True
@@ -539,12 +506,6 @@ class RunLeAFtool(qt.QWidget):
     @pyqtSlot("QWidget*", "QWidget*")
     def on_focus_changed(self, old, now):
         self.update_all()
-        if self.layer_ml_merge.ml_params.comboBoxModel == now:
-            self.layer_ml_merge.loading_models()
-        elif self.layer_ml_merge.ml_params.comboBoxModel_classification == now:
-            self.layer_ml_merge.loading_models_classification()
-        elif self.layer_ml_merge.ml_params.comboBoxCalibration == now:
-            self.layer_ml_merge.loading_calibration()
 
     def update_all(self):
 

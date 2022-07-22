@@ -191,6 +191,7 @@ class MachineLearningParams(qt.QGroupBox):
         # connection
         # common
         self.images_path.lineEditFile.editingFinished.connect(self.update_ml_params)
+        self.images_path.lineEditFile.editingFinished.connect(self.update_load)
         # ML
         self.ml_params.comboBoxCalibration.currentIndexChanged.connect(self.update_ml_params)
         self.ml_params.alpha.lineEdit.editingFinished.connect(self.update_ml_params)
@@ -206,10 +207,6 @@ class MachineLearningParams(qt.QGroupBox):
         #Merge
         self.merge_params.images_ext.currentIndexChanged.connect(self.update_ml_params)
         self.merge_params.rm_original.stateChanged.connect(self.update_ml_params)
-
-        # self.ml_params.comboBoxCalibration.focusInEvent(self.update_load)
-        # self.ml_params.comboBoxModel.focusInEvent(self.update_load)
-        # self.ml_params.comboBoxModel_classification.focusInEvent(self.update_load)
 
     def update_load(self):
         self.loading_models()
@@ -285,34 +282,39 @@ class MachineLearningParams(qt.QGroupBox):
             pass
 
     def upload_ml_params(self):
-        self.loading = True
-        if (self.parent.dict_for_yaml["RUNSTEP"]["ML"]) or (self.parent.dict_for_yaml["RUNSTEP"]["merge"]):
-            if self.parent.dict_for_yaml["ML"]["model_name"] and self.parent.dict_for_yaml["ML"]["model_name"] not in self.avail_models:
-                self.parent.logger.warning(f"Warning: arguments 'ML''model_name':'{self.parent.dict_for_yaml['ML']['model_name']}' is not avail, please use only {self.avail_models}")
-            if self.parent.dict_for_yaml["ML"]["model_name_classification"] and self.parent.dict_for_yaml["ML"]["model_name_classification"] not in self.avail_models_shapes:
-                self.parent.logger.warning(f"Warning: arguments 'ML''model_name_classification':'{self.parent.dict_for_yaml['ML']['model_name_classification']}' is not avail, please use only {self.avail_models_shapes}")
+        try:
+            self.loading = True
+            if (self.parent.dict_for_yaml["RUNSTEP"]["ML"]) or (self.parent.dict_for_yaml["RUNSTEP"]["merge"]):
+                if self.parent.dict_for_yaml["ML"]["model_name"] and self.parent.dict_for_yaml["ML"]["model_name"] not in self.avail_models:
+                    self.parent.logger.warning(f"Warning: arguments 'ML''model_name':'{self.parent.dict_for_yaml['ML']['model_name']}' is not avail, please use only {self.avail_models}")
+                if self.parent.dict_for_yaml["ML"]["model_name_classification"] and self.parent.dict_for_yaml["ML"]["model_name_classification"] not in self.avail_models_shapes:
+                    self.parent.logger.warning(f"Warning: arguments 'ML''model_name_classification':'{self.parent.dict_for_yaml['ML']['model_name_classification']}' is not avail, please use only {self.avail_models_shapes}")
 
-            if self.parent.dict_for_yaml["ML"]["calibration_name"] and self.parent.dict_for_yaml["ML"]["calibration_name"] not in self.calibration_avail:
-                self.parent.logger.warning(
-                    f"Warning: arguments 'ML''calibration_name':'{self.parent.dict_for_yaml['ML']['calibration_name']}' is not "
-                    f"avail, please use only {self.calibration_avail}")
-            self.parent.layer_tools.plant_model.setCurrentText(self.parent.dict_for_yaml["PLANT_MODEL"])
-            self.ml_params.comboBoxModel.setCurrentText(self.parent.dict_for_yaml["ML"]["model_name"])
-            self.images_path.lineEditFile.setText(self.parent.dict_for_yaml["ML"]["images_path"])
-            self.ml_params.comboBoxCalibration.setCurrentText(str(self.parent.dict_for_yaml["ML"]["calibration_name"]))
-            self.ml_params.small_object.lineEdit.setText(str(self.parent.dict_for_yaml["ML"]["small_object"]))
-            self.ml_params.alpha.lineEdit.setText(str(self.parent.dict_for_yaml["ML"]["alpha"]))
-            self.ml_params.leaf_border.lineEdit.setText(str(self.parent.dict_for_yaml["ML"]["leaf_border"]))
-            self.ml_params.split_ML.setChecked(bool(self.parent.dict_for_yaml["ML"]["split_ML"]))
-            self.ml_params.noise_remove.setChecked(bool(self.parent.dict_for_yaml["ML"]["noise_remove"]))
-            self.ml_params.force_rerun.setChecked(bool(self.parent.dict_for_yaml["ML"]["force_rerun"]))
-            self.ml_params.draw_ML_image.setChecked(bool(self.parent.dict_for_yaml["ML"]["draw_ML_image"]))
-            self.ml_params.color_lesion_individual.setChecked(bool(self.parent.dict_for_yaml["ML"]["color_lesion_individual"]))
-            self.loading = False
-        if self.parent.dict_for_yaml["RUNSTEP"]["merge"]:
-            self.merge_params.rm_original.setChecked(bool(self.parent.dict_for_yaml["MERGE"]["rm_original"]))
-            self.merge_params.images_ext.addItem(self.parent.dict_for_yaml["MERGE"]["extension"])
-            self.merge_params.images_ext.setCurrentText(self.parent.dict_for_yaml["MERGE"]["extension"])
+                if self.parent.dict_for_yaml["ML"]["calibration_name"] and self.parent.dict_for_yaml["ML"]["calibration_name"] not in self.calibration_avail:
+                    self.parent.logger.warning(
+                        f"Warning: arguments 'ML''calibration_name':'{self.parent.dict_for_yaml['ML']['calibration_name']}' is not "
+                        f"avail, please use only {self.calibration_avail}")
+                self.parent.layer_tools.plant_model.setCurrentText(self.parent.dict_for_yaml["PLANT_MODEL"])
+                self.ml_params.comboBoxModel.setCurrentText(self.parent.dict_for_yaml["ML"]["model_name"])
+                self.images_path.lineEditFile.setText(self.parent.dict_for_yaml["ML"]["images_path"])
+                self.ml_params.comboBoxCalibration.setCurrentText(str(self.parent.dict_for_yaml["ML"]["calibration_name"]))
+                self.ml_params.small_object.lineEdit.setText(str(self.parent.dict_for_yaml["ML"]["small_object"]))
+                self.ml_params.alpha.lineEdit.setText(str(self.parent.dict_for_yaml["ML"]["alpha"]))
+                self.ml_params.leaf_border.lineEdit.setText(str(self.parent.dict_for_yaml["ML"]["leaf_border"]))
+                self.ml_params.split_ML.setChecked(bool(self.parent.dict_for_yaml["ML"]["split_ML"]))
+                self.ml_params.noise_remove.setChecked(bool(self.parent.dict_for_yaml["ML"]["noise_remove"]))
+                self.ml_params.force_rerun.setChecked(bool(self.parent.dict_for_yaml["ML"]["force_rerun"]))
+                self.ml_params.draw_ML_image.setChecked(bool(self.parent.dict_for_yaml["ML"]["draw_ML_image"]))
+                self.ml_params.color_lesion_individual.setChecked(bool(self.parent.dict_for_yaml["ML"]["color_lesion_individual"]))
+                self.loading = False
+            if self.parent.dict_for_yaml["RUNSTEP"]["merge"]:
+                self.merge_params.rm_original.setChecked(bool(self.parent.dict_for_yaml["MERGE"]["rm_original"]))
+                self.merge_params.images_ext.addItem(self.parent.dict_for_yaml["MERGE"]["extension"])
+                self.merge_params.images_ext.setCurrentText(self.parent.dict_for_yaml["MERGE"]["extension"])
+        except KeyError as e:
+            self.parent.logger.error(f"ERROR: Key {e} is not found on file")
+            self.parent.dict_for_yaml = self.parent.dict_backup
+
 
     def show_ml_merge_params(self):
         if self.parent.layer_tools.ml_checkbox.isChecked() or self.parent.layer_tools.merge_checkbox.isChecked():
