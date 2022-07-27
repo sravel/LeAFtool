@@ -21,6 +21,19 @@ style = 'QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; pa
         '38)} QGroupBox {font: bold; border: 1px solid gray; margin-top:12 px; margin-bottom: 0px}'
 allow_ext = ["tif", "tiff", "TIF", "TIFF", "Tif", "Tiff", "im6", "IM6", "jpg", "JPG", "PNG", "png", "BMP", "bmp"]
 
+scroll_style = """QScrollBar:horizontal {
+     border: 1px solid #222222;
+     background: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0.0 #121212, stop: 0.2 #282828, stop: 1 #484848);
+     height: 20px;
+     margin: 0px 16px 0 16px;
+}
+QScrollBar:vertical
+{
+      background: QLinearGradient( x1: 0, y1: 0, x2: 1, y2: 0, stop: 0.0 #121212, stop: 0.2 #282828, stop: 1 #484848);
+      width: 20px;
+      margin: 16px 0 16px 0;
+      border: 1px solid #222222;
+}"""
 
 def return_default_folder():
     defaultFolder = Dfct.childText(vrb.userPathElement, "ImportImages")

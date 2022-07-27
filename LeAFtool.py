@@ -18,7 +18,7 @@ sys.path.insert(0, Path(vrb.folderMacroInterface + "/LeAFtool/").as_posix())
 # Import LeAFtool class
 from Leaftool_addons.DrawCrop import DrawCropParams
 from Leaftool_addons.MachineLearning import MachineLearningParams
-from Leaftool_addons.commonWidget import style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool
+from Leaftool_addons.commonWidget import style, scroll_style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool
 from Leaftool_addons.cmd_LeAFtool import *
 
 
@@ -400,13 +400,12 @@ class RunLeAFtool(qt.QWidget):
         self.setContentsMargins(10, 10, 10, 10)
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
-
+        self.setStyleSheet(scroll_style)
 
         # Create the text output widget.
         self.process = QTextEditLogger(self)
         self.logger.addHandler(self.process)
         self.logger.setLevel(logging.DEBUG)
-
 
         # add preview of yaml file
         self.preview_config = qt.QPlainTextEdit()
@@ -656,8 +655,16 @@ class MainInterface(qt.QWidget):
     def update_table(self):
         csv_file = self.csv_file.lineEditFile.text()
         if csv_file and Path(csv_file).exists():
+            with open(csv_file, "r") as csv:
+                header_txt = csv.readline().rstrip()
+            sep_dict = {",": header_txt.count(","),
+                        ";": header_txt.count(";"),
+                        # ".": header_txt.count("."),
+                        "\t": header_txt.count("\t")
+                        }
+            csv_separator = max(sep_dict, key=sep_dict.get)
             path_images = Path(csv_file).parent
-            df = pd.read_csv(csv_file, index_col=None, header=[0], sep="\t")
+            df = pd.read_csv(csv_file, index_col=None, header=[0], sep=csv_separator)
             ddict = df.to_dict(orient='list')
             self.table_final.loadDictionary(ddict, path_images)
         else:
