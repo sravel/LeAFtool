@@ -42,6 +42,7 @@ sys.path.insert(0, explorer_path)
 import DatabaseFunction as Dfct
 import UsefullFunctions as fct
 import UsefullVariables as vrb
+import UsefullWidgets as wgt
 
 # environment settings:
 pd.set_option('display.max_column', None)
@@ -176,7 +177,7 @@ class MetaInfo:
 
         self.__load_metadata_csv_to_dict()
         self.__build_meta_to_rename()
-        self.build_dataframe_with_crop_name()
+        self.__build_dataframe_with_crop_name()
 
     def __load_metadata_csv_to_dict(self):
         """ Load csv file into dict use for rename scan
@@ -232,7 +233,7 @@ class MetaInfo:
                 self.__dict_names_pos[(scan_name, pos)].update({"crop_name": rename})
                 self.rename_to_df[rename] = df.reset_index(drop=True)
 
-    def build_dataframe_with_crop_name(self):
+    def __build_dataframe_with_crop_name(self):
         df_list = [v for k, v in self.rename_to_df.items()]
         self.dataframe_with_crop_name = pd.concat(df_list, axis=0, ignore_index=True).reset_index(drop=True)
 
@@ -261,9 +262,108 @@ class MetaInfo:
         else:
             return None
 
-    def __repr__(self):
-        return f"{self.__class__}({pp(self.__dict__)})"
+    # def __repr__(self):
+    #     return f"{self.__class__}({pp(self.__dict__)})"
         # return f"{self.dataframe_with_crop_name}"
+
+
+class ParseDataframe(MetaInfo):
+    """
+    Object to merge raw dataframe with results
+    Build aggregated leaves and by leaves results
+    """
+    def __init__(self, csv_path=None, rename_oder=None, basedir=None, calibration_unit=None):
+        super().__init__(csv_path=csv_path, rename_oder=rename_oder)
+        self.basedir = Path(basedir)
+        self.big_frame = None
+        self.calibration = calibration_unit+"²"
+        self.df_leaves = None
+        self.ml_classes = None
+        self.sep = ","
+        self.logger = logging.getLogger('ParseDataframe')
+
+    def generate(self, sep=","):
+        self.sep = sep
+        filenames = self.basedir.glob("*_split-info.csv")
+        dfs = [pd.read_csv(filename, sep="\t") for filename in filenames]
+        self.big_frame = pd.concat(dfs, ignore_index=True)
+        self.big_frame.astype({'Number of pixels': 'float'})
+        self.big_frame.to_csv(self.basedir.joinpath("global_merge_split_info.csv"), index=False, sep=",", float_format="%.6f")
+        self.ml_classes = [elm for elm in self.big_frame['Class'].unique().tolist() if elm != "leaf"]
+        self.get_all_merge(group=[self.header[0], self.header[1], "crop_name", "leaf_ID"], aggregated_leaves=False)
+        self.get_all_merge(group=[self.header[0], self.header[1], "crop_name"], aggregated_leaves=True)
+
+    def get_all_merge(self, group=None, aggregated_leaves=False):
+        self.get_leaves_dataframe(group=group)
+        if aggregated_leaves:
+            on_list = [self.header[0], self.header[1], "crop_name", "number_of_leaves", f"leaves_area_{self.calibration}", "leaves_number_pixel"]
+            csv_path_file = self.basedir.joinpath(f"global-merge-ALL_aggregated_leaves.csv").as_posix()
+            self.logger.info(f"Merge all files aggregated leaves to {csv_path_file}")
+        else:
+            on_list = [self.header[0], self.header[1], "crop_name", "number_of_leaves", "leaf_ID", f"leaves_area_{self.calibration}", "leaves_number_pixel"]
+            csv_path_file = self.basedir.joinpath(f"global-merge-ALL_by_leaves.csv").as_posix()
+            self.logger.info(f"Merge all files by leaves to {csv_path_file}")
+
+        all_merge = []
+        for class_ml in self.ml_classes:
+            all_merge.append(self.df_to_stats_class(ml_class=class_ml, group=group))
+        all_merge_df = all_merge[0]
+        for df_ in all_merge[1:]:
+            all_merge_df = all_merge_df.merge(df_, on=on_list)
+        all_merge_df = pd.merge(self.dataframe_with_crop_name, all_merge_df, on=[self.header[0], self.header[1], "crop_name"], how='inner')
+        all_merge_df.sort_values([self.header[0], self.header[1]], ascending=(True, True)).fillna(0, inplace=True)
+        all_merge_df.to_csv(csv_path_file, index=False, sep=",", float_format='%.6f', na_rep=0)
+
+    @staticmethod
+    def flatten_columns(df, sep='.', ml_class=None):
+        def _remove_empty(column_name):
+            return tuple(element for element in column_name if element)
+
+        def _join(column_name):
+            if len(column_name) == 2 and "count" == column_name[1]:
+                return f"{ml_class}_nb"
+            elif ml_class and len(column_name) == 2 and "Area" in column_name[0]:
+                return f"{ml_class}_area_{column_name[1]}"
+            elif ml_class and len(column_name) == 2 and "pixels" in column_name[0]:
+                return f"{ml_class}_pixels_{column_name[1]}"
+            else:
+                return sep.join(column_name)
+
+        new_columns = [_join(_remove_empty(column)) for column in df.columns.values]
+        return new_columns
+
+    def get_leaves_dataframe(self, group=None):
+        self.df_leaves = self.big_frame.query("Class=='leaf'").groupby(group).agg(
+            {f"Area 2D ({self.calibration})": [("number_of_leaves", "count"),
+                                               (f"leaves_area_{self.calibration}", "sum")],
+             "Number of pixels": [("leaves_number_pixel", "sum")],       # TODO add to final dataframe
+             }).droplevel(0, axis=1).reset_index()
+
+        self.df_leaves.columns = self.flatten_columns(self.df_leaves, sep="")
+
+    def df_to_stats_class(self, ml_class='lesion', group=None):
+        df_tmp = self.big_frame.query(f"Class=='{ml_class}'").groupby(group).agg({
+            "leaf_ID": [("count", "count")],
+            f"Area 2D ({self.calibration})": ["sum", "mean", "median", "std", "min", "max"],
+            "Number of pixels": ["sum", "mean"],
+        }).reset_index()
+        df_tmp.columns = self.flatten_columns(df_tmp, ml_class=ml_class)
+        df_merge = self.df_leaves.merge(df_tmp)
+
+        df_merge.loc[df_merge[f'{ml_class}_nb'] == df_merge['number_of_leaves'], f'{ml_class}_nb'] = 0
+        df_merge[f"{ml_class}_percent"] = (df_merge[f"{ml_class}_area_sum"] / df_merge[
+            f"leaves_area_{self.calibration}"]) * 100
+        df_merge.insert(7, f"{ml_class}_percent", df_merge.pop(f"{ml_class}_percent"))
+        return df_merge
+
+    def __repr__(self):
+        return f"""{self.__class__}
+        {pp(self.basedir)}
+        {pp(self.calibration)}
+        {pp(self.df_leaves)}
+        {pp(self.ml_classes)}
+"""
+        # return f"{self.__class__}({pp(self.__dict__)})"
 
 
 class CropAndCutImages:
@@ -531,19 +631,16 @@ class AnalysisImages:
         self.noise_remove = noise_remove
         self.force_rerun = force_rerun
         self.basedir = Path(scan_folder)
+        self.parseDataframes = ParseDataframe(csv_path=csv_file, rename_oder=rename, basedir=self.basedir, calibration_unit=self.calibration_obj.dico_info['unit'])
 
         self.full_leaves_ipsdk_img = None
         self.full_files = []
         self.mask_overlay_files = []
         self.files_to_run = []
-        self.csv_dict_list = {}
         self.table_leaves = []
         self.draw_ML_image = draw_ML_image
         self.model_name_classification = model_name_classification
         self.color_lesion_individual = color_lesion_individual
-
-        # TODO add csv_path_merge to user argument ?
-        self.csv_path_merge = self.basedir.joinpath("global-merge-ALL.csv").as_posix()
         self.__check_inputs()
         # If model exist load for all images
         self.model_load = PyIPSDK.readRandomForestModel(self.model_path)
@@ -655,9 +752,6 @@ class AnalysisImages:
         mask_overlay_files_filter_set = set(
             sorted(f"{path.stem.replace('_mask_overlay', '')}" for path in self.mask_overlay_files))
 
-        for label in self.all_ml_labels:
-            self.csv_dict_list[label] = [self.basedir.joinpath(path).as_posix() for path in
-                                         glob_re(fr'.*_merge-{label}\.csv$', os.listdir(self.basedir.as_posix()))]
         basename_files_to_run = list(full_files_set - mask_overlay_files_filter_set)
         if self.force_rerun:
             self.files_to_run = self.full_files
@@ -685,68 +779,8 @@ class AnalysisImages:
             self.analyse_leaves(image_path=img_file_path.as_posix())
         self.logger.info("~~~~~~~~~ END STEP MACHINE LEARNING ~~~~~~~~~")
         self.logger.info("~~~~~~~~~ START MERGE CSV ~~~~~~~~~")
-        self.__merge_CSV()
+        self.parseDataframes.generate(sep=",")
         self.logger.info("~~~~~~~~~ END MERGE CSV ~~~~~~~~~")
-
-    def __merge_CSV(self, sep="\t", rm_merge=False):
-        """merge all CSV file include on final folder
-
-        Args:
-            sep: CSV output separator
-            rm_merge: if True, remove intermediate csv files Default: False
-        """
-        all_merge = []
-        for label in self.all_ml_labels:
-
-            if len(self.csv_dict_list[label]) > 1:
-                df_list = (pd.read_csv(f, sep=sep) for f in self.csv_dict_list[label])
-                df_merge = pd.concat(df_list, ignore_index=True, axis=0, ).fillna(0)
-                df_merge.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True),
-                                     inplace=True)
-                all_merge.append(df_merge)
-                csv_path_file = self.basedir.joinpath(f"global-merge-{label}.csv").as_posix()
-                self.logger.info(f"Merge all files for class: {label} to {csv_path_file}")
-                with open(csv_path_file, "w") as libsizeFile:
-                    df_merge.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
-                if rm_merge:
-                    for file in self.csv_dict_list[label]:
-                        Path(file).unlink(missing_ok=True)
-        self.logger.info(f"Merge all csv files to {self.csv_path_merge}")
-        all_merge_df = all_merge[0]
-        for df_ in all_merge[1:]:
-            all_merge_df = all_merge_df.merge(df_, on=self.meta_info.header + ["crop_name", "leaf_ID",
-                                                                               f"leaf_Area_{self.calibration_obj.dico_info['unit']}"])
-
-        # all_merge_df = pd.concat(all_merge, ignore_index=True, axis=1, join="inner")#.fillna(0)
-        all_merge_df.sort_values([self.meta_info.header[0], self.meta_info.header[1]], ascending=(True, True),
-                                 inplace=True)
-
-        def selector(x):
-            if x == "leaf_ID":
-                return "count"
-            elif all_merge_df.head(1)[x].dtype == "object":
-                return lambda x: ''.join(x.unique())
-            elif "min-size" in x:
-                return "min"
-            elif "max-size" in x:
-                return "max"
-            elif "mean-size" in x:
-                return "mean"
-            elif "median-size" in x:
-                return "median"
-            elif "SD-size" in x:
-                return "std"
-            else:
-                return "sum"
-
-        agg_dict = {f: selector(f) for f in all_merge_df.columns[2:]}
-        all_merge_df_agg = all_merge_df.groupby([self.meta_info.header[0], self.meta_info.header[1]]).agg(agg_dict).reset_index()
-
-        with open(self.csv_path_merge, "w") as libsizeFile:
-            all_merge_df.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
-        with open(self.csv_path_merge.replace(".csv","_aggragated_leaves.csv"), "w") as libsizeFile:
-            all_merge_df_agg.columns = ['number_of_leaves' if x == 'leaf_ID' else x for x in all_merge_df_agg.columns]
-            all_merge_df_agg.to_csv(libsizeFile, index=False, sep=sep, float_format='%.6f')
 
     def analyse_leaves(self, image_path):
         # extract path/name from image path
@@ -787,7 +821,8 @@ class AnalysisImages:
                               model_classification_to_label_dict=self.model_classification_to_label_dict,
                               small_object=self.small_object,
                               calibration_obj=self.calibration_obj,
-                              model_name_classification=self.model_name_classification)
+                              model_name_classification=self.model_name_classification,
+                              color_lesion_individual=self.color_lesion_individual)
                 dict_frames_separated_leaves.update(leaf.dico_frames_separated)
                 list_leaves_overlay.append(leaf)
                 list_leaves_overlay_IPSDK.append(leaf)
@@ -804,16 +839,16 @@ class AnalysisImages:
                                  overlayImagefilter)
 
             # build IPSDK overlay
-            geometryRgb2_label = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Label16, x_size, y_size)
-            overlayImagefilterIPSDK = PyIPSDK.createImage(geometryRgb2_label)
-            util.eraseImg(overlayImagefilterIPSDK, 0)
-
             # loop for all label to extract IPSDK label image:
             # print(leaf.image_ipsdk_blend_dict_class.items())
             dico_label_overlay_IPSDK = {}
             for leaf in list_leaves_overlay_IPSDK:
                 for label, img in leaf.image_ipsdk_blend_dict_class.items():
                     if label not in dico_label_overlay_IPSDK:
+                        if label == "proba":
+                            geometryRgb2_label = PyIPSDK.geometryRgb2d(PyIPSDK.eImageBufferType.eIBT_UInt16, x_size, y_size)
+                        else:
+                            geometryRgb2_label = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Label16, x_size, y_size)
                         dico_label_overlay_IPSDK[label] = PyIPSDK.createImage(geometryRgb2_label)
                         util.eraseImg(dico_label_overlay_IPSDK[label], 0)
                     # ui.displayImg(img, pause=True, title=f"{label} {len(dico_label_overlay_IPSDK)}")
@@ -830,7 +865,6 @@ class AnalysisImages:
                                          keys=dict_frames_separated_leaves.keys(), ignore_index=True)
 
             self.__build_df_split(basename, result_separated)
-            self.__build_df_merge(basename, result_separated)
             # call blend to build mask overlay
             self.__blend_overlay(basename, overlayImagefilter)
 
@@ -845,6 +879,7 @@ class AnalysisImages:
     def __blend_overlay(self, basename, ov):
         ov = util.convertImg(ov, PyIPSDK.eIBT_UInt16)
         # print(self.model_to_label_dict)
+        # ui.displayImg(ov, pause=True)
         color_label_to_RGB_Uint16blend = {}
         for label in self.model_to_label_dict.keys():
             i = self.model_to_label_dict[label]["value"]
@@ -853,10 +888,10 @@ class AnalysisImages:
             color_label_to_RGB_Uint16blend[i - 1] = colors_UINT16  # -1 car pas de leaf
         color_label_to_RGB_Uint16blend[0] = [0, 0, 0]
         # Count the number of labels
-        if self.color_lesion_individual:
-            nbLabels = glbmsr.statsMsr2d(ov).max
-        else:
-            nbLabels = 1
+        # if self.color_lesion_individual:
+        nbLabels = glbmsr.statsMsr2d(ov).max
+        # else:
+        #     nbLabels = 1
 
         # Create 3 random LUTs (one per channel)
         randValues = np.random.rand(3, int(nbLabels + 1)) * 65535
@@ -942,77 +977,6 @@ class AnalysisImages:
         csv_path_file = self.basedir.joinpath(f"{basename}_split-info.csv").as_posix()
         # print(f"CSV SAVE AT {csv_path_file}")
         result_separated.to_csv(csv_path_file, index=False, sep="\t", float_format='%.6f')
-
-    def __build_df_merge(self, basename, result_separated):
-        # merge all lesion by leaves
-        leaves = result_separated[result_separated['Class'] == 'leaf']['leaf_ID']
-        dico_df_by_leaves_label = {}
-        for leaf_id in leaves:
-            cond1 = result_separated['Class'] == 'leaf'
-            cond2 = result_separated['leaf_ID'] == int(leaf_id)
-            # area_leaf_px2 = result_separated[cond1 & cond2]['Number of pixels'].values[0]
-            area_leaf = result_separated[cond1 & cond2].filter(regex='Area').values[0][0]
-            for label in self.all_ml_labels:
-                dftmp = pd.DataFrame()
-
-                if label in result_separated['Class'].unique() and label.lower() not in ["leaf"]:
-                    cond3 = result_separated['Class'] == label
-                    # area_lesion_px2 = result_separated[cond2 & cond3].filter(regex='Number of pixels')
-                    area_lesion_cm2 = result_separated[cond2 & cond3].filter(regex='Area')
-                    nb_lesion = len(area_lesion_cm2)
-                    area_lesion_sum = area_lesion_cm2.sum().values[0]
-                    area_lesion_median = area_lesion_cm2.median().values[0]
-                    area_lesion_mean = area_lesion_cm2.mean().values[0]
-                    area_lesion_std = area_lesion_cm2.std().values[0]
-                    area_lesion_min = area_lesion_cm2.min().values[0]
-                    area_lesion_max = area_lesion_cm2.max().values[0]
-                    percent_lesion = (area_lesion_sum / area_leaf) * 100
-
-                    # build dataframe with resume infos
-                    dftmp = pd.DataFrame(data=[{f"leaf_ID": leaf_id,
-
-                                                f"leaf_Area_{self.calibration_obj.dico_info['unit']}": area_leaf,
-                                                f"{label}_Area_{self.calibration_obj.dico_info['unit']}": area_lesion_sum,
-
-                                                f"{label}_nb": nb_lesion,
-                                                f"{label}_percent": percent_lesion,
-
-                                                f"{label}_median-size_{self.calibration_obj.dico_info['unit']}": area_lesion_median,
-                                                f"{label}_mean-size_{self.calibration_obj.dico_info['unit']}": area_lesion_mean,
-                                                f"{label}_SD-size_{self.calibration_obj.dico_info['unit']}": area_lesion_std,
-                                                f"{label}_min-size_{self.calibration_obj.dico_info['unit']}": area_lesion_min,
-                                                f"{label}_max-size_{self.calibration_obj.dico_info['unit']}": area_lesion_max
-                                                }])
-                elif label.lower() not in ["leaf", "background", "lesion"]:
-                    dftmp = pd.DataFrame(data=[{f"leaf_ID": leaf_id,
-
-                                                f"leaf_Area_{self.calibration_obj.dico_info['unit']}": area_leaf,
-                                                f"{label}_Area_{self.calibration_obj.dico_info['unit']}": 0,
-
-                                                f"{label}_nb": 0,
-                                                f"{label}_percent": 0,
-
-                                                f"{label}_median-size_{self.calibration_obj.dico_info['unit']}": 0,
-                                                f"{label}_mean-size_{self.calibration_obj.dico_info['unit']}": 0,
-                                                f"{label}_SD-size_{self.calibration_obj.dico_info['unit']}": 0,
-                                                f"{label}_min-size_{self.calibration_obj.dico_info['unit']}": 0,
-                                                f"{label}_max-size_{self.calibration_obj.dico_info['unit']}": 0
-                                                }])
-                if label not in dico_df_by_leaves_label:
-                    dico_df_by_leaves_label[label] = [dftmp]
-                else:
-                    dico_df_by_leaves_label[label].append(dftmp)
-
-        for label, list_df in dico_df_by_leaves_label.items():
-            dftmp = pd.concat(list_df, axis=0, ignore_index=True)
-            if not dftmp.empty:
-                dftmp = self.__append_col_df(basename, dftmp)
-                # save results to csv format
-                csv_path_file = self.basedir.joinpath(f"{basename}_merge-{label}.csv").as_posix()
-                if csv_path_file not in self.csv_dict_list[label]:
-                    self.csv_dict_list[label].append(csv_path_file)
-                    dftmp.to_csv(csv_path_file, index=False, sep="\t", float_format='%.6f')
-        # concat
 
     def __split_leaves(self, image_path, loaded_image):
         # extract path/name from image path
@@ -1199,6 +1163,7 @@ class Leaf:
         self.y_position = int(y_pos)
         self.x_size = int(x_size)
         self.y_size = int(y_size)
+        self.color_lesion_individual = None
 
         self.full_leaves_ipsdk_img = full_leaves_ipsdk_img
 
@@ -1212,7 +1177,7 @@ class Leaf:
     def label_image_to_df(self, split_mask_separated_filter, calibration_obj, label):
         # check if mask is empty after remove small elements
         nbLabels = glbmsr.statsMsr2d(split_mask_separated_filter).max
-        if nbLabels > 0:
+        if nbLabels >= 0:
             if split_mask_separated_filter.hasGeometricCalibration():
                 calibration = split_mask_separated_filter.getGeometricCalibration()
             else:
@@ -1261,21 +1226,30 @@ class Leaf:
             # ui.displayImg(split_mask_separated_filter, pause=True)
             # convert to panda dataframe
             df = outset_to_df(outMeasureSet1)
+            if df.empty:
+                df = pd.DataFrame(columns=df.columns, index=[0])
+                df.fillna(0, inplace=True)
             df.insert(0, "Class", label)
             df.insert(0, "leaf_ID", self.leaf_id)
             self.dico_frames_separated[f"{label}-{self.leaf_id}"] = df
 
     def label_to_overlay_blend(self, split_mask_filter, i):
         # use to generate on overlay image with overlay function
-        split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
+        if self.color_lesion_individual:
+            split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
+        else:
+            split_mask_filter_bin = bin.thresholdImg(split_mask_filter, 0, 0)
+            logic.logicalNotImg(split_mask_filter_bin, split_mask_filter_bin)
+            split_mask_filter_UInt16 = util.convertImg(split_mask_filter_bin, PyIPSDK.eImageBufferType.eIBT_UInt16)
         label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i - 1)
         self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
         # ui.displayImg(self.image_label_blend, pause=True, title="self.image_label_blend")
 
     def analysis(self, model_load, model_to_label_dict, model_classification_to_label_dict, small_object,
                  calibration_obj, save_cut=False,
-                 model_name_classification=None):
+                 model_name_classification=None, color_lesion_individual=False):
         self.model_name_classification = model_name_classification
+        self.color_lesion_individual = color_lesion_individual
         ipsdk_img = util.getROI2dImg(self.full_leaves_ipsdk_img, self.x_position, self.y_position, self.x_size,
                                      self.y_size)
         if save_cut:
@@ -1285,9 +1259,25 @@ class Leaf:
             PyIPSDK.saveTiffImageFile(outimgname.as_posix(), ipsdk_img)
 
         # apply smart segmentation machine learning
-        # TODO: SAVE PROBABILITY IMAGE?
         all_masks, imageProbabilities = ml.pixelClassificationRFWithProbabilitiesImg(ipsdk_img, model_load)
-
+        def save_proba(imageProbabilities):
+            outImage = util.copyImg(imageProbabilities)
+            outImage = util.convertImg(outImage, PyIPSDK.eIBT_UInt8)
+            valueMin = 0.25
+            imageOverlay = arithm.addScalarImg(imageProbabilities, - valueMin)
+            imageOverlay = arithm.multiplyScalarImg(imageOverlay, 255 / (1 - valueMin))
+            imageOverlay = util.convertImg(imageOverlay, PyIPSDK.eIBT_UInt8)
+            currentLut = [[255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 237, 236, 235, 234, 233, 232, 231, 230, 229, 228, 227, 226, 225, 224, 223, 222, 221, 220, 219, 218, 217, 216, 215, 214, 213, 212, 211, 210, 209, 208, 207, 206, 205, 204, 203, 202, 201, 200, 199, 198, 197, 196, 195, 194, 193, 192, 191, 190, 189, 188, 187, 186, 185, 184, 183, 182, 181, 180, 179, 178, 177, 176, 175, 174, 173, 172, 171, 170, 169, 168, 167, 166, 165, 164, 163, 162, 161, 160, 159, 158, 157, 156, 155, 154, 153, 152, 151, 150, 149, 148, 147, 146, 145, 144, 143, 142, 141, 140, 139, 138, 137, 136, 135, 134, 133, 132, 131, 130, 129, 128, 127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116, 115, 114, 113, 112, 111, 110, 109, 108, 107, 106, 105, 104, 103, 102, 101, 100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0], [0, 0, 1, 2, 4, 5, 6, 7, 8, 8, 9, 10, 12, 13, 14, 15, 16, 16, 17, 18, 20, 21, 22, 23, 24, 24, 25, 26, 28, 29, 30, 31, 32, 32, 33, 34, 36, 37, 38, 39, 40, 40, 41, 42, 44, 45, 46, 47, 48, 48, 49, 50, 52, 53, 54, 55, 56, 56, 57, 58, 60, 61, 62, 63, 64, 65, 65, 66, 68, 69, 70, 71, 72, 73, 73, 74, 76, 77, 78, 79, 80, 81, 81, 82, 84, 85, 86, 87, 88, 89, 89, 90, 92, 93, 94, 95, 96, 97, 97, 98, 100, 101, 102, 103, 104, 105, 105, 106, 108, 109, 110, 111, 112, 113, 113, 114, 116, 117, 118, 119, 120, 121, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 131, 132, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 147, 148, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 163, 164, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 179, 180, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 195, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 211, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+            imageOverlay = fct.applyLut(imageOverlay, currentLut)
+            outImage = wgt.customBlending(imageOverlay, outImage, 1)
+            outImage = util.convertImg(outImage, PyIPSDK.eIBT_UInt16)
+            outImage = itrans.normalizeImg(outImage, PyIPSDK.createRange(0, 65535))
+            self.image_ipsdk_blend_dict_class["proba"] = outImage
+            # self.image_ipsdk_blend_probabilities = outImage
+            # ui.displayImg(outImage, pause=True, title="outImage")
+            # outimgname = self.basedir.joinpath(f"{self.basename}_{self.leaf_id}_proba.tif")
+            # PyIPSDK.saveTiffImageFile(outimgname.as_posix(), outImage)
+        save_proba(imageProbabilities)
         # create empty overlay for label color with original size
         self.image_label_blend = PyIPSDK.createImage(all_masks, PyIPSDK.eImageBufferType.eIBT_UInt16)
         util.eraseImg(self.image_label_blend, 0)
@@ -1355,6 +1345,7 @@ class Leaf:
                         self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
                         self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
                     if label.lower() not in ["lesion"]:
+                        self.label_to_overlay_blend(split_mask_separated_filter, i)
                         self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
                         self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
         for img in self.image_ipsdk_blend_dict_class.values():
