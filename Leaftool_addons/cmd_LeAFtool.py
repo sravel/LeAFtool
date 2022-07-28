@@ -62,19 +62,19 @@ pd.set_option('display.precision', 9)
 # color_label_to_RGB_Uint16 = dict([(i, elm) for i, elm in zip(color_label, colors65535)])
 # print(color_label_to_RGB_Uint16)
 
-color_label_to_RGB_Uint16 = {'blue': (7967, 30583, 46260),
-                             'orange': (65535, 32639, 3598),
-                             'green': (11308, 41120, 11308),
-                             'red': (54998, 10023, 10280),
-                             'purple': (38036, 26471, 48573),
-                             'brown': (35980, 22102, 19275),
-                             'pink': (58339, 30583, 49858),
-                             'gray': (32639, 32639, 32639),
-                             'gold': (48316, 48573, 8738),
-                             'turquoise': (5911, 48830, 53199),
-                             'black': (0, 0, 0),
-                             'white': (65535, 65535, 65535)
-                             }
+# color_label_to_RGB_Uint16 = {'blue': (7967, 30583, 46260),
+#                              'orange': (65535, 32639, 3598),
+#                              'green': (11308, 41120, 11308),
+#                              'red': (54998, 10023, 10280),
+#                              'purple': (38036, 26471, 48573),
+#                              'brown': (35980, 22102, 19275),
+#                              'pink': (58339, 30583, 49858),
+#                              'gray': (32639, 32639, 32639),
+#                              'gold': (48316, 48573, 8738),
+#                              'turquoise': (5911, 48830, 53199),
+#                              'black': (0, 0, 0),
+#                              'white': (65535, 65535, 65535)
+#                              }
 
 
 # pp(color_label_to_RGB_Uint16)
@@ -344,14 +344,19 @@ class ParseDataframe(MetaInfo):
     def df_to_stats_class(self, ml_class='lesion', group=None):
         df_tmp = self.big_frame.query(f"Class=='{ml_class}'").groupby(group).agg({
             "leaf_ID": [("count", "count")],
-            f"Area 2D ({self.calibration})": ["sum", "mean", "median", "std", "min", "max"],
+            f"Area 2D ({self.calibration})": [(f"sum_{self.calibration}", "sum"),
+                                              (f"mean_{self.calibration}", "mean"),
+                                              (f"median_{self.calibration}", "median"),
+                                              (f"std_{self.calibration}", "std"),
+                                              (f"min_{self.calibration}", "min"),
+                                              (f"max_{self.calibration}", "max")],
             "Number of pixels": ["sum", "mean"],
         }).reset_index()
         df_tmp.columns = self.flatten_columns(df_tmp, ml_class=ml_class)
         df_merge = self.df_leaves.merge(df_tmp)
 
         df_merge.loc[df_merge[f'{ml_class}_nb'] == df_merge['number_of_leaves'], f'{ml_class}_nb'] = 0
-        df_merge[f"{ml_class}_percent"] = (df_merge[f"{ml_class}_area_sum"] / df_merge[
+        df_merge[f"{ml_class}_percent"] = (df_merge[f"{ml_class}_area_sum_{self.calibration}"] / df_merge[
             f"leaves_area_{self.calibration}"]) * 100
         df_merge.insert(7, f"{ml_class}_percent", df_merge.pop(f"{ml_class}_percent"))
         return df_merge
