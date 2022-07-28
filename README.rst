@@ -14,7 +14,7 @@ Research on plant leaf diseases requires the acquisition of quantitative data to
 
 Existing procedures can partially meet the needs but are not always adapted to the particularities of the images obtained in the laboratory. From a scanned image under laboratory conditions containing several leaves of plants showing symptoms of a known disease, the algorithm developed makes it possible to obtain for each sheet of the image the number and the characteristics of surface and shape. lesions.
 
-The LeAFtool (Lesion Area Finding tool) is a python script used IPSDK library and also implemented on macro on `Explorer` tool develop by IPSDK.
+The LeAFtool (Lesion Area Finding tool) is a python script that uses the IPSDK library and also implemented as a macro on the Explorer tool developed by ReactivIP.
 
 https://www.reactivip.com/fr/traitement-dimages/#graphic
 
