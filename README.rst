@@ -38,13 +38,13 @@ GUI
 ---
 
 +---------------------------------------+---------------------------------------+
-|  |build|                        +  |explore|                        +
+|  |build|                              +  |explore|                            +
 +---------------------------------------+---------------------------------------+
-| Build and Run scripts with interface  +  Explore results                  +
+| Build and Run scripts with interface  +  Explore results                      +
 +---------------------------------------+---------------------------------------+
-| |link|                                                          +
+| |link|                                                                        +
 +-------------------------------------------------------------------------------+
-|  Live Link to images on Explorer                                      +
+|  Live Link to images on Explorer                                              +
 +-------------------------------------------------------------------------------+
 
 .. |build| image:: Images/windows.png?raw=true
@@ -116,13 +116,13 @@ Build config.yaml file like:
         rm_original: false
         extension: jpg
 
-Some exemples
-=============
+Exemples
+========
 
 +------------------------------------------------------+------------------------------------------------------+
-|  |exemple1|                                  +  |exemple2|                                  +
+|  |exemple1|                                          +  |exemple2|                                          +
 +------------------------------------------------------+------------------------------------------------------+
-| 1 class:  lesion, with leaf border                 +  2 class: lesion and chloroses, without leaf border  +
+| 1 class:  lesion, with leaf border                   +  2 class: lesion and chloroses, without leaf border  +
 +------------------------------------------------------+------------------------------------------------------+
 
 
