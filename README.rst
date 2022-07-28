@@ -2,7 +2,7 @@
 .. image:: Images/LeAFtool-long.png?raw=true
    :target: Images/LeAFtool-long.png?raw=true
    :alt: Alt text
-   :width: 50%
+   :width: 100%
 
 
 .. contents:: Table of Contents
