@@ -74,8 +74,49 @@ CMD
 
 Build config.yaml file like:
 
-.. literalinclude:: ./config.yaml
-   :language: YAML
+.. code-block:: yaml
+   
+  log_path:
+	debug: true
+	PLANT_MODEL: banana
+	csv_file:
+	rename:
+	RUNSTEP:
+		  draw: true
+		  crop: true
+		  ML: true
+		  merge: true
+	DRAWCROP:
+		  images_path:
+		  out_cut_dir:
+		  out_draw_dir:
+		  extension: tif
+		  x_pieces: 1
+		  y_pieces: 1
+		  top: 0
+		  left: 0
+		  right: 0
+		  bottom: 0
+		  noise_remove: false
+		  numbering: Bottom
+		  force_rerun: false
+	ML:
+		  images_path:
+		  model_name:
+		  model_name_classification:
+		  split_ML: false
+		  calibration_name:
+		  small_object: 30
+		  alpha: 0.8
+		  color_lesion_individual: true
+		  leaf_border: 0
+		  noise_remove: false
+		  force_rerun: false
+		  draw_ML_image: true
+	MERGE:
+		  rm_original: false
+		  extension: jpg
+
 
 
 Some exemples
@@ -93,14 +134,14 @@ Some exemples
    :target: Images/banana.jpg?raw=true
    :alt: Alt text
    :width: 100%
-   :align: middle
+
 
 
 .. |exemple2| image:: Images/2class.jpg?raw=true
    :target: Images/2class.jpg?raw=true
    :alt: Alt text
    :width: 72%   
-   :align: middle
+
 
 License
 =======
