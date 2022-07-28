@@ -137,7 +137,7 @@ Exemples
 .. |exemple2| image:: Images/2class.jpg?raw=true
     :target: Images/2class.jpg?raw=true
     :alt: Alt text
-    :width: 72%
+    :width: 100%
 
 
 License
