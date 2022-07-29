@@ -30,6 +30,7 @@ import time
 import yaml
 import colorlog
 import argparse
+import threading
 
 # sys.tracebacklimit = 1
 # auto add Explorer in PYTHONPATH
@@ -78,29 +79,6 @@ pd.set_option('display.precision', 9)
 
 
 # pp(color_label_to_RGB_Uint16)
-
-
-class Timer(object):
-    def __enter__(self):
-        self.start()
-        # __enter__ must return an instance bound with the "as" keyword
-        return self
-
-        # There are other arguments to __exit__ but we don't care here
-
-    def __exit__(self, *args, **kwargs):
-        self.stop()
-
-    def start(self):
-        if hasattr(self, 'interval'):
-            del self.interval
-        self.start_time = time.time()
-
-    def stop(self):
-        if hasattr(self, 'start_time'):
-            self.interval = time.time() - self.start_time
-            del self.start_time  # Force timer reinit
-
 
 def read_image_UINT16(path_image):
     extension = Path(path_image).suffix[1:]
@@ -453,29 +431,6 @@ class CropAndCutImages:
         except Exception as e:
             self.logger.error(e)
 
-    @staticmethod
-    def __opencv_to_IPSDK(image):
-        """convert opencv image to IPSDK image"""
-        if len(image.shape) >= 3:
-            if image.shape[2] >= 3:
-                if image.shape[2] == 3:
-                    b, g, r = cv2.split(image)
-                if image.shape[2] == 4:
-                    b, g, r, a = cv2.split(image)
-                allChannels = [PyIPSDK.fromArray(r), PyIPSDK.fromArray(g), PyIPSDK.fromArray(b)]
-                imageIP = PyIPSDK.createImageRgb(PyIPSDK.eImageBufferType.eIBT_UInt16, image.shape[1],
-                                                 image.shape[0])
-                util.eraseImg(imageIP, 0)
-                for c in range(3):
-                    plan = PyIPSDK.extractPlan(0, c, 0, imageIP)
-                    util.copyImg(allChannels[c], plan)
-            else:
-                imageIP = PyIPSDK.fromArray(image)
-        else:
-            imageIP = PyIPSDK.fromArray(image)
-        imageIP = util.convertImg(imageIP, PyIPSDK.eImageBufferType.eIBT_UInt16)
-        return imageIP
-
     def loop_crop(self, cutdir_name, csv_file):
         """Run crop on images files
 
@@ -483,15 +438,11 @@ class CropAndCutImages:
             cutdir_name (:obj:`str`): the output directory to store crop images
             csv_file (:obj:`str`): The file use to rename images
         """
-
         def save_image(img, pos):
             basename = self.meta_info.meta_to_crop_rename(scan_name=img, pos=pos)
             file_name = cut_dir_path.joinpath(f"{basename}.tif")
             if basename and not Path(file_name).exists():
-                x, y, w, h = box
-                im_crop = im_borderless[y: h, x: w].copy()
-                img = (im_crop * 256).astype('uint16')
-                imageIP = self.__opencv_to_IPSDK(img)
+                imageIP = util.getROI2dImg(im_borderless, *box)
                 if self.noise_rm:
                     # image noise removal
                     imageIP = morpho.unionLinearOpening2dImg(imageIP, 3.0, PyIPSDK.eBEP_Disable)
@@ -518,24 +469,32 @@ class CropAndCutImages:
         if self.meta_info.exit_status:
             for scan_num, img_file in enumerate(self.__scan_folder.glob(f"*.{self.extension}"), 1):
                 self.logger.info(f"CROP IMAGE FILE {scan_num}/{nb_files}:\t{img_file.name} to ")
-                image = cv2.imread(img_file.as_posix())
-                im_borderless = image[self.params["top"]:image.shape[0] - self.params["bottom"],
-                                self.params["left"]:image.shape[1] - self.params["right"]]
-                img_width, img_height = im_borderless.shape[1], im_borderless.shape[0]
+                image = read_image_UINT16(img_file.as_posix())
+                x_size = image.getGeometry().getSizeX()
+                y_size = image.getGeometry().getSizeY()
+                w = x_size - (self.params["left"] + self.params["right"])
+                h = y_size - (self.params["top"] + self.params["bottom"])
+
+                im_borderless = util.getROI2dImg(image, self.params["left"], self.params["top"], w, h)
+                img_width = im_borderless.getGeometry().getSizeX()
+                img_height = im_borderless.getGeometry().getSizeY()
+
                 height = img_height // self.params["y_pieces"]
                 width = img_width // self.params["x_pieces"]
                 position = 1
-
+                # print(f"img_width:{img_width}\timg_height:{img_height}\twidth:{width}\theight:{height}")
                 if self.numbering == "right":
                     for i in range(0, self.params["y_pieces"]):
                         for j in range(0, self.params["x_pieces"]):
-                            box = (j * width, i * height, (j + 1) * width, (i + 1) * height)
+                            box = (j * width, i * height, width, height)
+                            # print(f"box: {box}")
                             save_image(img_file.stem, position)
                             position += 1
                 elif self.numbering == "bottom":
                     for i in range(0, self.params["x_pieces"]):
                         for j in range(0, self.params["y_pieces"]):
-                            box = (i * width, j * height, (i + 1) * width, (j + 1) * height)
+                            box = (i * width, j * height, width, height)
+                            # print(f"box: {box}")
                             save_image(img_file.stem, position)
                             position += 1
         self.logger.info("~~~~~~~~~ END STEP CUT ~~~~~~~~~")
@@ -577,14 +536,7 @@ class CropAndCutImages:
                                  pt2=(im_draw.shape[1] - self.params["right"], (height * i + self.params["top"])),
                                  color=(0, 255, 0),
                                  thickness=4)
-                if self.noise_rm:
-                    # image noise removal
-                    im_draw = (im_draw * 256).astype('uint16')
-                    imageIP = self.__opencv_to_IPSDK(im_draw)
-                    imageIP = morpho.unionLinearOpening2dImg(imageIP, 3.0, PyIPSDK.eBEP_Disable)
-                    PyIPSDK.saveTiffImageFile(outname, imageIP)
-                else:
-                    cv2.imwrite(outname, im_draw)
+                cv2.imwrite(outname, im_draw)
             else:
                 self.logger.warning(f" - {Path(outname).name} Already draw")
         self.logger.info("~~~~~~~~~ END STEP DRAW ~~~~~~~~~")
