@@ -1,3 +1,4 @@
+import logging
 import sys, os, traceback
 
 from PyQt5.QtCore import Qt, QCoreApplication, QDir
@@ -181,6 +182,7 @@ class TableWidget(qt.QTableWidget):
         self.ddict = ddict
         self.indice_crop_name = None
         self.indice_class_name = None
+        self.old_selection = [0,0]
         self.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
         self.path_images = path_images
 
@@ -238,47 +240,56 @@ class TableWidget(qt.QTableWidget):
             self.window().raise_()
             self.window().activateWindow()
 
+    @staticmethod
+    def clearAllImages():
+        while vrb.mainWindow.widgetLabelImage.layout.count() != 0:
+            itemImage = vrb.mainWindow.widgetLabelImage.layout.itemAt(0)
+            if itemImage is not None:
+                vrb.mainWindow.widgetLabelImage.deleteLabel(itemImage.widget(), actualize=False)
+
     def cellClick(self, cellItem):
         if vrb.mainWindow:
-            vrb.mainWindow.widgetLabelImage.clearAll()
-
             rowValue, columnValue = cellItem.row(), cellItem.column()
-            text = self.item(rowValue, self.indice_crop_name).text() # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
-            header = self.horizontalHeaderItem(cellItem.column()).text()
-            if "_" in header:
-                class_label = header.split("_")[0]
-            elif self.indice_class_name:
-                class_label = self.item(rowValue, self.indice_class_name).text()
-            else:
+            text = self.item(rowValue, self.indice_crop_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
+            if rowValue != self.old_selection[0] and text != self.old_selection[1]:
+                self.old_selection = [rowValue, text]
+                if vrb.mainWindow.widgetLabelImage.layout.count() > 0:
+                    self.clearAllImages()
+
+                # header = self.horizontalHeaderItem(cellItem.column()).text()
+                # if "_" in header:
+                #     class_label = header.split("_")[0]
+                # elif self.indice_class_name:
+                #     class_label = self.item(rowValue, self.indice_class_name).text()
+                # else:
                 class_label = "lesion"
-            try:
-                nameImageInput = f"{self.path_images}/{text}.tif"
-                imageInput = PyIPSDK.loadTiffImageFile(nameImageInput)
+                try:
+                    nameImageInput = f"{self.path_images}/{text}.tif"
+                    imageInput = PyIPSDK.loadTiffImageFile(nameImageInput)
 
-                vrb.mainWindow.widgetLabelImage.addNewImage(text, imageInput)
+                    vrb.mainWindow.widgetLabelImage.addNewImage(text, imageInput)
 
-                all_overlay_path = Path(self.path_images).glob(f'*{text}*_overlay_ipsdk.tif')
-                for file in all_overlay_path:
-                    label = file.stem.split("_")[-3]
-                    image = PyIPSDK.loadTiffImageFile(file.as_posix())
-                    vrb.mainWindow.widgetLabelImage.addNewImage(f"Result_{label}", image)
+                    all_overlay_path = Path(self.path_images).glob(f'*{text}*_overlay_ipsdk.tif')
+                    for file in all_overlay_path:
+                        label = file.stem.split("_")[-3]
+                        image = PyIPSDK.loadTiffImageFile(file.as_posix())
+                        vrb.mainWindow.widgetLabelImage.addNewImage(f"{label}_overlay", image)
 
-                for num in range(
-                        vrb.mainWindow.widgetLabelImage.layout.count()):  # Boucle pour afficher l'image "Image" et
-                    # l'image "Result" en overlay
-                    try:
-                        item = vrb.mainWindow.widgetLabelImage.layout.itemAt(num)
-                        if item is not None:
-                            label = item.widget()
-                            if label.name == text:
-                                vrb.mainWindow.changeCurrentXmlElement(label)
-                                vrb.mainWindow.widgetImage.groupBoxOverlay.checkBoxOverlay.setChecked(True)
-                                vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText(f"Result_{class_label}")
-                    except:
-                        pass
+                    for num in range(
+                            vrb.mainWindow.widgetLabelImage.layout.count()):  # Boucle pour afficher l'image "Image" et l'image "Result" en overlay
+                        try:
+                            item = vrb.mainWindow.widgetLabelImage.layout.itemAt(num)
+                            if item is not None:
+                                label = item.widget()
+                                if label.name == text:
+                                    vrb.mainWindow.changeCurrentXmlElement(label)
+                                    vrb.mainWindow.widgetImage.groupBoxOverlay.checkBoxOverlay.setChecked(True)
+                                    vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText(f"{class_label}_overlay")
+                        except:
+                            pass
 
-            except:
-                traceback.print_exc(file=sys.stderr)
+                except:
+                    traceback.print_exc(file=sys.stderr)
 
 
 if __name__ == '__main__':
