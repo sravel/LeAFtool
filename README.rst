@@ -20,6 +20,11 @@ https://www.reactivip.com/fr/traitement-dimages/#graphic
 
 IPSDK Explorer 3.1; Reactiv’IP; Grenoble, France, 2022; https://www.reactivip.com/
 
+`Write to me`_ with your questions.
+
+.. _Write to me: mailto:sebastien.ravel@cirad.fr
+
+
 Install
 =======
 
