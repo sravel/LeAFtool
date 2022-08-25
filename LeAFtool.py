@@ -4,9 +4,12 @@ import subprocess
 from pathlib import Path
 from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
 from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5 import QtGui, Qsci, QtCore
+from PyQt5 import QtGui, Qsci
 import PyQt5.QtWidgets as qt
 from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QToolTip
+from PyQt5.QtGui import QFont
+
 
 import UsefullVariables as vrb
 import UsefullWidgets as wgt
@@ -16,9 +19,9 @@ import DatabaseFunction as Dfct
 sys.path.insert(0, Path(vrb.folderMacroInterface + "/LeAFtool/").as_posix())
 
 # Import LeAFtool class
-from Leaftool_addons.DrawCrop import DrawCropParams
+from Leaftool_addons.DrawCut import DrawCutParams
 from Leaftool_addons.MachineLearning import MachineLearningParams
-from Leaftool_addons.commonWidget import style, scroll_style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool
+from Leaftool_addons.commonWidget import style, scroll_style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool, Documentator
 from Leaftool_addons.cmd_LeAFtool import *
 
 
@@ -137,41 +140,60 @@ class ToolsActivation(qt.QGroupBox):
         self.plant_model_label = qt.QLabel()
         self.plant_model_label.setText("Plant model:")
         self.plant_model_label.setFixedHeight(int(30 * vrb.ratio))
+        self.plant_model_label.setWhatsThis(self.parent.parent.dico_doc["PLANT_MODEL"])
+        self.plant_model_label.setStatusTip(self.parent.parent.dico_doc_str["PLANT_MODEL"])
         self.plant_model = qt.QComboBox()
         self.plant_model.addItems(["banana", "rice"])
         self.plant_model.setFixedSize(int(100 * vrb.ratio), int(25 * vrb.ratio))
+        self.plant_model.setWhatsThis(self.parent.parent.dico_doc["PLANT_MODEL"])
+        self.plant_model.setStatusTip(self.parent.parent.dico_doc_str["PLANT_MODEL"])
 
         self.show_meta_checkbox = qt.QCheckBox()
         self.show_meta_checkbox.setText("Show Meta Section")
         self.show_meta_checkbox.setChecked(True)
         self.show_meta_checkbox.setFixedWidth(int(150 * vrb.ratio))
+        self.show_meta_checkbox.setWhatsThis(self.parent.parent.dico_doc["show_meta"])
+        self.show_meta_checkbox.setStatusTip(self.parent.parent.dico_doc_str["show_meta"])
 
         self.draw_checkbox = qt.QCheckBox()
         self.draw_checkbox.setText("Draw")
         self.draw_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
+        self.draw_checkbox.setWhatsThis(self.parent.parent.dico_doc["draw"])
+        self.draw_checkbox.setStatusTip(self.parent.parent.dico_doc_str["draw"])
 
-        self.crop_checkbox = qt.QCheckBox()
-        self.crop_checkbox.setText("Crop")
-        self.crop_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
+        self.cut_checkbox = qt.QCheckBox()
+        self.cut_checkbox.setText("Cut")
+        self.cut_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
+        self.cut_checkbox.setWhatsThis(self.parent.parent.dico_doc["cut"])
+        self.cut_checkbox.setStatusTip(self.parent.parent.dico_doc_str["cut"])
 
         self.ml_checkbox = qt.QCheckBox()
         self.ml_checkbox.setText("ML")
         self.ml_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
+        self.ml_checkbox.setWhatsThis(self.parent.parent.dico_doc["ml"])
+        self.ml_checkbox.setStatusTip(self.parent.parent.dico_doc_str["ml"])
 
         self.merge_checkbox = qt.QCheckBox()
         self.merge_checkbox.setText("Merge")
         self.merge_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
+        self.merge_checkbox.setWhatsThis(self.parent.parent.dico_doc["merge"])
+        self.merge_checkbox.setStatusTip(self.parent.parent.dico_doc_str["merge"])
 
         self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
+        self.csv_file.setWhatsThis(self.parent.parent.dico_doc["csv_file"])
+        self.csv_file.setStatusTip(self.parent.parent.dico_doc_str["csv_file"])
 
         self.list_selection = TwoListSelection()
+        self.list_selection.setWhatsThis(self.parent.parent.dico_doc["rename"])
+        self.list_selection.setStatusTip(self.parent.parent.dico_doc_str["rename"])
         # self.list_selection.setAutoFillBackground(True)
-        self.list_selection.setMaximumHeight(int(80 * vrb.ratio))
+        self.list_selection.setMaximumHeight(int(65 * vrb.ratio))
 
         # Position widgets
         self.layout.addWidget(self.plant_model_label, 0, 0, Qt.AlignLeft)
         self.layout.addWidget(self.plant_model, 0, 1, Qt.AlignLeft)
         self.layout.addWidget(self.show_meta_checkbox, 0, 2, Qt.AlignLeft)
+        self.layout.addWidget(self.parent.parent.whatsThisButton, 0, 4, Qt.AlignBottom)
 
         # Layout Style
         tools_group = qt.QGroupBox()
@@ -182,7 +204,7 @@ class ToolsActivation(qt.QGroupBox):
         tools_group.setLayout(tools_group.layout)
         tools_group.layout.addStretch()
         tools_group.layout.addWidget(self.draw_checkbox)
-        tools_group.layout.addWidget(self.crop_checkbox)
+        tools_group.layout.addWidget(self.cut_checkbox)
         tools_group.layout.addWidget(self.ml_checkbox)
         tools_group.layout.addWidget(self.merge_checkbox)
         tools_group.layout.addStretch()
@@ -206,7 +228,7 @@ class ToolsActivation(qt.QGroupBox):
 
         # connections
         self.draw_checkbox.stateChanged.connect(self.update_activation_tools)
-        self.crop_checkbox.stateChanged.connect(self.update_activation_tools)
+        self.cut_checkbox.stateChanged.connect(self.update_activation_tools)
         self.ml_checkbox.stateChanged.connect(self.update_activation_tools)
         self.merge_checkbox.stateChanged.connect(self.update_activation_tools)
         self.plant_model.currentIndexChanged.connect(self.update_activation_tools)
@@ -235,7 +257,7 @@ class ToolsActivation(qt.QGroupBox):
             else:
                 self.plant_model.setCurrentText(self.parent.dict_for_yaml["PLANT_MODEL"])
             self.draw_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["draw"]))
-            self.crop_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["crop"]))
+            self.cut_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["cut"]))
             self.ml_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["ML"]))
             self.merge_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["merge"]))
             self.csv_file.lineEditFile.setText(self.parent.dict_for_yaml["csv_file"])
@@ -248,9 +270,9 @@ class ToolsActivation(qt.QGroupBox):
 
     def update_activation_tools(self):
         if not self.loading:
-            self.parent.dict_for_yaml["RUNSTEP"]["crop"] = self.crop_checkbox.isChecked()
+            self.parent.dict_for_yaml["RUNSTEP"]["cut"] = self.cut_checkbox.isChecked()
             self.parent.dict_for_yaml["RUNSTEP"]["draw"] = self.draw_checkbox.isChecked()
-            self.parent.layer_draw_crop.show_draw_params()
+            self.parent.layer_draw_cut.show_draw_params()
             self.parent.dict_for_yaml["RUNSTEP"]["ML"] = self.ml_checkbox.isChecked()
             self.parent.dict_for_yaml["RUNSTEP"]["merge"] = self.merge_checkbox.isChecked()
             self.parent.layer_ml_merge.show_ml_merge_params()
@@ -262,7 +284,7 @@ class ToolsActivation(qt.QGroupBox):
 
             # if all disable, disable run
             if not self.parent.layer_tools.draw_checkbox.isChecked() \
-                    and not self.parent.layer_tools.crop_checkbox.isChecked() \
+                    and not self.parent.layer_tools.cut_checkbox.isChecked() \
                     and not self.parent.layer_tools.ml_checkbox.isChecked() \
                     and not self.parent.layer_tools.merge_checkbox.isChecked():
                 self.parent.layer_leaftool_params.run.setDisabled(True)
@@ -271,7 +293,7 @@ class ToolsActivation(qt.QGroupBox):
                 self.parent.layer_leaftool_params.run.setDisabled(False)
                 self.parent.layer_leaftool_params.save.setDisabled(False)
                 # self.csv_file.setVisible(self.parent.layer_tools.draw_checkbox.isChecked())
-                # self.csv_file.setVisible(self.parent.layer_tools.crop_checkbox.isChecked())
+                # self.csv_file.setVisible(self.parent.layer_tools.cut_checkbox.isChecked())
                 # self.csv_file.setVisible(self.parent.layer_tools.ml_checkbox.isChecked())
 
     def update_header_csv(self):
@@ -319,27 +341,37 @@ class LeaftoolParams(qt.QGroupBox):
         self.save_label.setText("Save YAML:")
         self.save = wgt.PushButtonImage(vrb.folderImages + "/Save_As.png")
         self.save.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.save.setWhatsThis(self.parent.parent.dico_doc["save"])
+        self.save.setStatusTip(self.parent.parent.dico_doc_str["save"])
 
         self.upload_label = qt.QLabel()
         self.upload_label.setText("Upload YAML:")
         self.upload = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/upload.png")
         self.upload.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.upload.setWhatsThis(self.parent.parent.dico_doc["upload"])
+        self.upload.setStatusTip(self.parent.parent.dico_doc_str["upload"])
 
         self.run_label = qt.QLabel()
         self.run_label.setText("Run:")
         self.run = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/run.png")
         self.run.setCheckable(True)
         self.run.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.run.setWhatsThis(self.parent.parent.dico_doc["run"])
+        self.run.setStatusTip(self.parent.parent.dico_doc_str["run"])
 
         self.preview_yaml_checkbox = qt.QCheckBox()
         self.preview_yaml_checkbox.setChecked(True)
         self.preview_yaml_checkbox.setText("Preview YAML")
         self.preview_yaml_checkbox.setFixedSize(int(120 * vrb.ratio), int(30 * vrb.ratio))
+        self.preview_yaml_checkbox.setWhatsThis(self.parent.parent.dico_doc["preview"])
+        self.preview_yaml_checkbox.setStatusTip(self.parent.parent.dico_doc_str["preview"])
 
         self.debug_checkbox = qt.QCheckBox()
         self.debug_checkbox.setChecked(False)
         self.debug_checkbox.setText("Debug")
         self.debug_checkbox.setFixedSize(int(120 * vrb.ratio), int(30 * vrb.ratio))
+        self.debug_checkbox.setWhatsThis(self.parent.parent.dico_doc["debug"])
+        self.debug_checkbox.setStatusTip(self.parent.parent.dico_doc_str["debug"])
 
         # Position Widgets
         self.layout.addWidget(self.upload_label, 0, 0, Qt.AlignRight)
@@ -384,8 +416,9 @@ class LeaftoolParams(qt.QGroupBox):
 
 class RunLeAFtool(qt.QWidget):
     """"""
-    def __init__(self):
+    def __init__(self, parent):
         super().__init__()
+        self.parent = parent
         self.dict_for_yaml = {}
         self.dict_backup = {}
         self.logger = logger
@@ -412,6 +445,8 @@ class RunLeAFtool(qt.QWidget):
         self.preview_config = YAMLEditor()
         self.preview_config.setMinimumWidth(500)
         self.preview_config.setAutoFillBackground(True)
+        self.preview_config.setWhatsThis(self.parent.dico_doc["preview_edit"])
+        self.preview_config.setStatusTip(self.parent.dico_doc_str["preview_edit"])
 
         # add path config file
         self.yaml_path = vrb.folderMacroInterface + "/LeAFtool/config.yaml"
@@ -419,7 +454,7 @@ class RunLeAFtool(qt.QWidget):
 
         # Add layer part
         self.layer_tools = ToolsActivation(parent=self)
-        self.layer_draw_crop = DrawCropParams(parent=self)
+        self.layer_draw_cut = DrawCutParams(parent=self)
         self.layer_leaftool_params = LeaftoolParams(parent=self)
         self.layer_ml_merge = MachineLearningParams(parent=self)
 
@@ -427,14 +462,14 @@ class RunLeAFtool(qt.QWidget):
         not_resize = self.layer_ml_merge.sizePolicy()
         not_resize.setRetainSizeWhenHidden(True)
         self.layer_ml_merge.setSizePolicy(not_resize)
-        not_resize = self.layer_draw_crop.sizePolicy()
+        not_resize = self.layer_draw_cut.sizePolicy()
         not_resize.setRetainSizeWhenHidden(True)
-        self.layer_draw_crop.setSizePolicy(not_resize)
+        self.layer_draw_cut.setSizePolicy(not_resize)
 
         self.layout.addWidget(self.layer_tools, 0, 0, 1, 2)
         self.layout.addWidget(self.layer_tools.meta_group, 1, 0, 1, 2)
         self.layout.addWidget(self.preview_config, 0, 3, 5, 1)
-        self.layout.addWidget(self.layer_draw_crop, 2, 0)
+        self.layout.addWidget(self.layer_draw_cut, 2, 0)
         self.layout.addWidget(self.layer_ml_merge, 2, 1)
         self.layout.addWidget(self.layer_leaftool_params, 3, 0, 1, 2)
         self.layout.addWidget(self.process.widget, 4, 0, 1, 2)
@@ -448,9 +483,7 @@ class RunLeAFtool(qt.QWidget):
         self.layer_leaftool_params.upload.clicked.connect(self.upload_yaml)
         self.layer_leaftool_params.save.clicked.connect(self.save_yaml)
         self.layer_leaftool_params.run.clicked.connect(self.change_run_state)
-
-        from PyQt5 import QtWidgets
-        QtWidgets.QApplication.instance().focusChanged.connect(self.on_focus_changed)
+        qt.QtWidgets.QApplication.instance().focusChanged.connect(self.on_focus_changed)
 
     def change_run_state(self):
         if self.layer_leaftool_params.run.isChecked():
@@ -509,14 +542,14 @@ class RunLeAFtool(qt.QWidget):
     def update_all(self):
 
         self.layer_tools.update_activation_tools()
-        self.layer_draw_crop.update_draw_crop_params()
+        self.layer_draw_cut.update_draw_cut_params()
         self.layer_ml_merge.update_ml_params()
         self.layer_leaftool_params.update_debug()
         self.preview_config.setText(self.export_use_yaml)
 
     def upload_all(self):
         self.layer_tools.upload_activation_tools()
-        self.layer_draw_crop.upload_draw_crop_params()
+        self.layer_draw_cut.upload_draw_cut_params()
         self.layer_ml_merge.upload_ml_params()
         self.layer_leaftool_params.upload_debug()
         self.update_all()
@@ -539,12 +572,12 @@ class RunLeAFtool(qt.QWidget):
         elif self.dict_for_yaml["RUNSTEP"]["merge"] and not "MERGE" in self.dict_for_yaml:
             self.dict_for_yaml.update({"MERGE": self.dict_backup["MERGE"]})
 
-        # For Draw/crop
-        if not self.dict_for_yaml["RUNSTEP"]["draw"] and not self.dict_for_yaml["RUNSTEP"]["crop"] and "DRAWCROP" in self.dict_for_yaml:
-            self.dict_backup.update({"DRAWCROP": self.dict_for_yaml["DRAWCROP"]})
-            del self.dict_for_yaml["DRAWCROP"]
-        elif "DRAWCROP" not in self.dict_for_yaml and (self.dict_for_yaml["RUNSTEP"]["draw"] or self.dict_for_yaml["RUNSTEP"]["crop"]):
-            self.dict_for_yaml.update({"DRAWCROP": self.dict_backup["DRAWCROP"]})
+        # For Draw/cut
+        if not self.dict_for_yaml["RUNSTEP"]["draw"] and not self.dict_for_yaml["RUNSTEP"]["cut"] and "DRAW-CUT" in self.dict_for_yaml:
+            self.dict_backup.update({"DRAW-CUT": self.dict_for_yaml["DRAW-CUT"]})
+            del self.dict_for_yaml["DRAW-CUT"]
+        elif "DRAW-CUT" not in self.dict_for_yaml and (self.dict_for_yaml["RUNSTEP"]["draw"] or self.dict_for_yaml["RUNSTEP"]["cut"]):
+            self.dict_for_yaml.update({"DRAW-CUT": self.dict_backup["DRAW-CUT"]})
 
     @property
     def export_use_yaml(self):
@@ -591,21 +624,34 @@ class RunLeAFtool(qt.QWidget):
             return False
 
 
-class MainInterface(qt.QWidget):
+class MainInterface(qt.QMainWindow):
     """
     """
     def __init__(self):
         super().__init__()
+        self.main = qt.QWidget()
+        self.setCentralWidget(self.main)
+        # Add documentation mode:
+        self.documentator = Documentator()
+        self.dico_doc = self.documentator.dico_doc
+        self.dico_doc_str = self.documentator.dico_doc_str
+        self.whatsThisButton = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/help.png")
+        self.whatsThisButton.setFixedSize(int(40 * vrb.ratio), int(40 * vrb.ratio))
+        self.whatsThisButton.clicked.connect(qt.QWhatsThis.enterWhatsThisMode)
+        self.whatsThisButton.setToolTip("Click on this button and then on another object to get the documentation")
+        self.statusbar = self.statusBar()
+        self.statusbar.setSizeGripEnabled(False)
+
+        # QToolTip.setFont(QFont('SansSerif', 20))
+
         # Layout Style
-        # self.setAttribute(Qt.WA_DeleteOnClose)
-        self.layout = qt.QVBoxLayout()
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.layout = qt.QVBoxLayout(self.main)
         self.layout.setSizeConstraint(1)
-        self.setLayout(self.layout)
-        self.setContentsMargins(5, 5, 5, 5)
-        self.setAutoFillBackground(True)
+        self.main.setContentsMargins(5, 5, 5, 5)
+        self.main.setAutoFillBackground(True)
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
-        # self.setWidgetResizable(True)
 
         # Add title and logo
         self.setWindowTitle("LeAFtool")
@@ -623,7 +669,7 @@ class MainInterface(qt.QWidget):
         self.tabs.setTabPosition(qt.QTabWidget.West)
 
         # FIRST TAB PAGE
-        self.tab1 = RunLeAFtool()
+        self.tab1 = RunLeAFtool(parent=self)
 
         # SECOND TAB PAGE
         self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
@@ -652,6 +698,25 @@ class MainInterface(qt.QWidget):
         # Edit connection
         self.csv_file.lineEditFile.textChanged.connect(self.update_table)
 
+    # def event(self, event):
+    #     if event.type() == QEvent.EnterWhatsThisMode:  # Event called when ? is clicked
+    #         # qt.QWhatsThis.leaveWhatsThisMode()
+    #         # qt.QWhatsThis.enterWhatsThisMode()  # To change mouse cursor back to arrow
+    #         # Any other code you want could go here
+    #         return True
+    #     # elif event.type() == QtCore.QEvent.LeaveWhatsThisMode:
+    #     #     qt.QWhatsThis.enterWhatsThisMode()
+    #     #     qt.QWhatsThis.
+    #
+    #     return super(MainInterface, self).event(event)
+
+    # def event(self, ev):
+    #     if ev.type() == QEvent.ToolTip:
+    #         QToolTip.hideText()
+    #         ev.ignore()
+    #         return True
+    #     return super().event(ev)
+
     def update_table(self):
         csv_file = self.csv_file.lineEditFile.text()
         if csv_file and Path(csv_file).exists():
@@ -671,10 +736,10 @@ class MainInterface(qt.QWidget):
             self.table_final.clear()
 
 
-main_interface = MainInterface()
-
-
 def openWidget():
+    main_interface = None
+    if not main_interface:
+        main_interface = MainInterface()
     main_interface.showMaximized()
     fct.showWidget(main_interface)
 
@@ -700,13 +765,13 @@ if __name__ == '__main__':
 
 
     sys.excepthook = exception_hook
-
+    qt.QApplication.setStyle(qt.QStyleFactory.create('Fusion'))  # <- Choose the style
     # foo = FileSelectorLeaftool("test")
     # foo = DataExplorer()
     # foo = ToolsActivation(parent=RunLeAFtool)
     foo = MainInterface()
     # foo = RunLeAFtool()
     # foo = NumberLineEditLabel(constraint="Natural", text="0", label="Y pieces:")
-    foo.showMaximized()
+    # foo.showFullScreen()
     foo.show()
     app.exec_()
