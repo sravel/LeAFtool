@@ -5,10 +5,10 @@ csv_file:
 rename:
 RUNSTEP:
     draw: true
-    crop: true
+    cut: true
     ML: true
     merge: true
-DRAWCROP:
+DRAW-CUT:
     images_path:
     out_cut_dir:
     out_draw_dir:
