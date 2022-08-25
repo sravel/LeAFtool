@@ -159,11 +159,14 @@ class MachineLearningParams(qt.QGroupBox):
         super().__init__()
         self.parent = parent
         self.loading = True
+        self.avail_models = []
+        self.avail_models_shapes = []
+        self.calibration_avail = []
 
         # Layout Style
         self.setTitle("Machine Learning and Merge Params")
         self.setStyleSheet(style)
-        self.setFixedSize(int(498 * vrb.ratio), int(330 * vrb.ratio))
+        self.setFixedSize(int(498 * vrb.ratio), int(320 * vrb.ratio))
         # self.setMinimumSize(int(450 * vrb.ratio), int(310 * vrb.ratio))
         self.layout = qt.QGridLayout()
         self.layout.setContentsMargins(15, 15, 15, 15)
@@ -171,11 +174,34 @@ class MachineLearningParams(qt.QGroupBox):
 
         # Widgets
         self.images_path = FileSelectorLeaftool(label="Images Path:")
+        self.images_path.setWhatsThis(self.parent.parent.dico_doc["images_path_ml"])
+        self.images_path.setStatusTip(self.parent.parent.dico_doc_str["images_path_ml"])
         self.ml_params = MLParams()
+        self.ml_params.comboBoxModel.setWhatsThis(self.parent.parent.dico_doc["model_name"])
+        self.ml_params.comboBoxModel.setStatusTip(self.parent.parent.dico_doc_str["model_name"])
+        self.ml_params.comboBoxModel_classification.setWhatsThis(self.parent.parent.dico_doc["model_name_classification"])
+        self.ml_params.comboBoxModel_classification.setStatusTip(self.parent.parent.dico_doc_str["model_name_classification"])
+        self.ml_params.comboBoxCalibration.setWhatsThis(self.parent.parent.dico_doc["calibration_name"])
+        self.ml_params.comboBoxCalibration.setStatusTip(self.parent.parent.dico_doc_str["calibration_name"])
+        self.ml_params.small_object.setWhatsThis(self.parent.parent.dico_doc["small_object"])
+        self.ml_params.small_object.setStatusTip(self.parent.parent.dico_doc_str["small_object"])
+        self.ml_params.alpha.setWhatsThis(self.parent.parent.dico_doc["alpha"])
+        self.ml_params.alpha.setStatusTip(self.parent.parent.dico_doc_str["alpha"])
+        self.ml_params.leaf_border.setWhatsThis(self.parent.parent.dico_doc["leaf_border"])
+        self.ml_params.leaf_border.setStatusTip(self.parent.parent.dico_doc_str["leaf_border"])
+        self.ml_params.color_lesion_individual.setWhatsThis(self.parent.parent.dico_doc["color_lesion_individual"])
+        self.ml_params.color_lesion_individual.setStatusTip(self.parent.parent.dico_doc_str["color_lesion_individual"])
+        self.ml_params.noise_remove.setWhatsThis(self.parent.parent.dico_doc["noise_remove"])
+        self.ml_params.noise_remove.setStatusTip(self.parent.parent.dico_doc_str["noise_remove"])
+        self.ml_params.force_rerun.setWhatsThis(self.parent.parent.dico_doc["force_rerun"])
+        self.ml_params.force_rerun.setStatusTip(self.parent.parent.dico_doc_str["force_rerun"])
+
         self.merge_params = MergeParams()
-        self.avail_models = []
-        self.avail_models_shapes = []
-        self.calibration_avail = []
+        self.merge_params.images_ext.setWhatsThis(self.parent.parent.dico_doc["extension"])
+        self.merge_params.images_ext.setStatusTip(self.parent.parent.dico_doc_str["extension"])
+        self.merge_params.rm_original.setWhatsThis(self.parent.parent.dico_doc["rm_original"])
+        self.merge_params.rm_original.setStatusTip(self.parent.parent.dico_doc_str["rm_original"])
+
         spacerItem = qt.QSpacerItem(20, 40, qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
         self.layout.addItem(spacerItem, 3, 0, 1, 1)
         # Position Widgets
