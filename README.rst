@@ -90,10 +90,10 @@ Build config.yaml file like:
     rename:
     RUNSTEP:
         draw: true
-        crop: true
+        cut: true
         ML: true
         merge: true
-    DRAWCROP:
+    DRAW-CUT:
         images_path:
         out_cut_dir:
         out_draw_dir:
@@ -134,55 +134,65 @@ Then run with command line:
 Parameters
 ==========
 
+RUN STEP
+--------
+
+- **draw** *(boolean)*: Active draw tool to see the lines of the border and cutting
+- **cut** *(boolean)*: Active cut tool to see the lines of the border and cutting
+- **ml** *(boolean)*: Active machine learning tool to see apply model build on Explorer
+- **merge** *(boolean)*: Active merge tool to stuck original file to image with classes overlay
+
+
+
 Global
 ------
 
-- **log_path** *(str)*: Path where log files are created
-- **debug** *(boolean)*: More verbose for debug error
-- **PLANT_MODEL** *(banana/rice)*: Select plant leaf
-- **csv_file** *(str)*: Path of csv file with Meta-info, scan_name and position mandatory at first position. separator is autodetect
-- **rename** *(list)*: ordered list of csv header used to rename crop file
+- **log_path** *(str)*: Directory path where log files will be created
+- **debug** *(boolean)*: More verbose logging for errors debug
+- **PLANT_MODEL** *(banana/rice)*: Select plante model
+- **csv_file** *(str)*: CSV path file with Meta-info, scan name and position mandatory at first and second position. Separator is autodetect
+- **rename** *(list)*: ordered list of csv header used to rename cut files
 
 
-DRAW/CROP
----------
+DRAW-CUT
+--------
 
-- **images_path** *(str)*: Path to raw scan images
-- **out_cut_dir** *(str)*: Path to cropped directory
-- **out_draw_dir** *(str)*: Path to draw directory
+- **images_path** *(str)*: Input path directory with raw scan images
+- **out_cut_dir** *(str)*: Output path directory for cut images
+- **out_draw_dir** *(str)*: Output path directory for draw images
 - **extension** *(jpg/JPG/PNG/png/BMP/bmp/tif/tiff/TIF/TIFF/Tif/Tiff)*: The raw scan images extension, must be the same for all scan.
-- **x_pieces** *(int)*: Number of vertical crop *Default: 1*
-- **y_pieces** *(int)*: Number of horizontal crop *Default: 1*
-- **top** *(int)*: The top marge to remove before cut *Default: 0*
-- **left** *(int)*: The left marge to remove before cut *Default: 0*
-- **bottom** *(int)*: The bottom marge to remove before cut *Default: 0*
-- **right** *(int)*: The right marge to remove before cut *Default: 0*
-- **noise_remove** *(boolean)*: use IPSDK unionLinearOpening2dImg function to remove small objet noise *Default: False*
-- **numbering** *(right/bottom)*: if right: the output order crop is left to right, if bottom: the output order is top to bottom then left *Default: right*
-- **force_rerun** *(boolean)*: even files existed, rerun draw and/or cut *Default: False*
+- **x_pieces** *(int)*: The number of output fragments to split vertically *Default: 1*
+- **y_pieces** *(int)*: The number of output fragments to split horizontally *Default: 1*
+- **top** *(int)*: The top margin to remove before cut *Default: 0*
+- **left** *(int)*: The left margin to remove before cut *Default: 0*
+- **bottom** *(int)*: The bottom margin to remove before cut *Default: 0*
+- **right** *(int)*: The right margin to remove before cut *Default: 0*
+- **noise_remove** *(boolean)*: Use IPSDK unionLinearOpening2dImg function to remove small white objet noise *Default: False*
+- **force_rerun** *(boolean)*: Force running again even files existed, rerun draw and/or cut. *Default: False*
+- **numbering** *(right/bottom)*: if right: the output order cut is left to right, if bottom: the output order is top to bottom then left *Default: right*
+.. image:: ./docs/images/splitExemple.png
 
 ML
 --
 
-- **images_path** *(str)*: Path to cropped scan images
+- **images_path** *(str)*: Input path directory with cutted scan images
 - **model_name** *(int)*: The IPSDK PixelClassification model name build with Explorer
 - **model_name_classification** *(int)*: The IPSDK Classification model name build with Explorer
 - **split_ML** *(boolean)*: Use machine learning to split leaves instead of RGB *Default: False*
 - **calibration_name** *(str)*: Name of Explorer calibration, no calibration if empty
 - **small_object** *(int)*: The minimum area of class, to remove small noise detect object *Default: 100*
-- **alpha** *(float)*: The degree of transparency of overlay color label. Must float 0 <= alpha <= 1 *Default: 0.5*
-- **color_lesion_individual** *(boolean)*: If `True` make random color for separated lesion else use model color for all *Default: True*
+- **alpha** *(float)*: The degree of transparency to apply for overlay color labels. Must float 0 <= alpha <= 1 *Default: 0.5*
+- **color_lesion_individual** *(boolean)*: If `True` apply random color for each separated lesions else use all lesions will colored with color of model *Default: True*
 - **leaf_border** *(int)*: The diameter of the brush (in pixels) used to erode the leaf *Default: 0*
-- **noise_remove** *(boolean)*: Use IPSDK unionLinearOpening2dImg function with param 3 pixels *Default: False*
-- **force_rerun** *(boolean)*: If `True`, rerun all images, else only not run *Default: True*
-- **draw_ML_image** *(boolean)*: If `True`, add rectangle overlay corresponding to image use for apply ML *Default: False*
+- **noise_remove** *(boolean)*: Use IPSDK unionLinearOpening2dImg function to remove small white objet noise *Default: False*
+- **force_rerun** *(boolean)*: Force running again even files existed. *Default: False*
+- **draw_ML_image** *(boolean)*: If `True`, add overlay rectangle corresponding to image used for apply Machine learning (generally one leaf) *Default: False*
 
 Merge
 -----
 
 - **rm_original** *(boolean)*: remove individual files `*_mask_overlay` *Default: False*
-- **extension** *(jpg/JPG/PNG/png/BMP/bmp/tif/tiff/TIF/TIFF/Tif/Tiff)*: Merge file extention *Default: jpg*
-
+- **extension** *(jpg/JPG/PNG/png/BMP/bmp/tif/tiff/TIF/TIFF/Tif/Tiff)*: Merge file extension *Default: jpg*
 Examples
 ========
 
