@@ -1,12 +1,13 @@
 import logging
 import sys, os, traceback
 
-from PyQt5.QtCore import Qt, QCoreApplication, QDir
+from PyQt5.QtCore import Qt, QCoreApplication
 import PyQt5.QtWidgets as qt
 from PyQt5 import QtGui, QtCore
 from pathlib import Path
 import pandas as pd
 import re
+from docutils.core import publish_parts, publish_string
 
 sys.path.insert(0, Path("../").as_posix())
 
@@ -16,7 +17,6 @@ import UsefullWidgets as wgt
 import UsefullFunctions as fct
 import DatabaseFunction as Dfct
 
-from pathlib import Path
 
 style = 'QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(33, 171, ' \
         '38)} QGroupBox {font: bold; border: 1px solid gray; margin-top:12 px; margin-bottom: 0px}'
@@ -78,6 +78,27 @@ def get_files_ext(path, extensions, add_ext=True):
             else:
                 all_files.append(elm.stem)
     return all_files, files_ext
+
+
+class Documentator:
+    def __init__(self):
+        self.dico_doc_rst = {}
+        self.dico_doc_str = {}
+        key = None
+        with open(f"{vrb.folderMacroInterface}/LeAFtool/docs/params.rst", "r") as docs:
+            for line in docs:
+                if re.match("^- \*\*", line):
+                    key, value = line.rstrip().split(" ")[1].replace("*", ""), line.rstrip().replace("- ", "")
+                    self.dico_doc_rst[key] = value
+                    self.dico_doc_str[key] = value.replace("*", "")
+                elif line.rstrip() == "":
+                    key = None
+                elif key:
+                    self.dico_doc_rst[key] = self.dico_doc_rst[key]+"\n\n\n"+line
+        self.dico_doc = {}
+        for key, value in self.dico_doc_rst.items():
+            self.dico_doc[key] = publish_parts(value, writer_name='html')['html_body'].replace("<img", "<p><img").replace("</div>", "</p></div>")
+            # self.dico_doc[key] = publish_string(value, writer_name='html', settings_overrides={'output_encoding': 'utf-8'}).decode()
 
 
 class FileSelectorLeaftool(qt.QGroupBox):
@@ -180,7 +201,7 @@ class TableWidget(qt.QTableWidget):
         super(TableWidget, self).__init__()
 
         self.ddict = ddict
-        self.indice_crop_name = None
+        self.indice_cut_name = None
         self.indice_class_name = None
         self.old_selection = [0,0]
         self.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
@@ -204,8 +225,8 @@ class TableWidget(qt.QTableWidget):
             self.setColumnCount(len(self.ddict))
             col = 0
             for indice, name in enumerate(self.ddict):
-                if name == "crop_name":
-                    self.indice_crop_name = indice
+                if name == "cut_name":
+                    self.indice_cut_name = indice
                 if name == "Class":
                     self.indice_class_name = indice
                 self.setRowCount(len(self.ddict[name]))
@@ -250,7 +271,7 @@ class TableWidget(qt.QTableWidget):
     def cellClick(self, cellItem):
         if vrb.mainWindow:
             rowValue, columnValue = cellItem.row(), cellItem.column()
-            text = self.item(rowValue, self.indice_crop_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
+            text = self.item(rowValue, self.indice_cut_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
             if rowValue != self.old_selection[0] and text != self.old_selection[1]:
                 self.old_selection = [rowValue, text]
                 if vrb.mainWindow.widgetLabelImage.layout.count() > 0:
