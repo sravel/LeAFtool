@@ -147,7 +147,7 @@ class MetaInfo:
         self.rename_order = rename_oder
         self.header = None
         self.dataframe = None
-        self.dataframe_with_crop_name = None
+        self.dataframe_with_cut_name = None
         self.__dict_names_pos = None
         self.__list_filenames = None
         self.rename_to_df = {}
@@ -155,12 +155,12 @@ class MetaInfo:
 
         self.__load_metadata_csv_to_dict()
         self.__build_meta_to_rename()
-        self.__build_dataframe_with_crop_name()
+        self.__build_dataframe_with_cut_name()
 
     def __load_metadata_csv_to_dict(self):
         """ Load csv file into dict use for rename scan
             The dataframe must contain header for columns
-            The 2 first columns are use as dict key (tuple key with scan name and crop position)
+            The 2 first columns are use as dict key (tuple key with scan name and cut position)
 
         Args:
             csv_file (:obj:`str`): Path to csv file
@@ -207,13 +207,13 @@ class MetaInfo:
             for scan_name, pos in self.__dict_names_pos:
                 df = self.dataframe.query(f'{self.header[0]}=="{scan_name}" & {self.header[1]}=={pos}').copy(deep=True)
                 rename = "_".join([str(df[elm].values[0]).replace("/", "-") for elm in self.rename_order])
-                df["crop_name"] = rename
-                self.__dict_names_pos[(scan_name, pos)].update({"crop_name": rename})
+                df["cut_name"] = rename
+                self.__dict_names_pos[(scan_name, pos)].update({"cut_name": rename})
                 self.rename_to_df[rename] = df.reset_index(drop=True)
 
-    def __build_dataframe_with_crop_name(self):
+    def __build_dataframe_with_cut_name(self):
         df_list = [v for k, v in self.rename_to_df.items()]
-        self.dataframe_with_crop_name = pd.concat(df_list, axis=0, ignore_index=True).reset_index(drop=True)
+        self.dataframe_with_cut_name = pd.concat(df_list, axis=0, ignore_index=True).reset_index(drop=True)
 
     def check_correspondingML(self, files_list):
         """test if all scan file have name on csv file"""
@@ -234,15 +234,15 @@ class MetaInfo:
         except KeyError:
             return None
 
-    def meta_to_crop_rename(self, scan_name, pos):
+    def meta_to_cut_rename(self, scan_name, pos):
         if (scan_name, pos) in self.__dict_names_pos:
-            return self.__dict_names_pos[(scan_name, pos)]["crop_name"]
+            return self.__dict_names_pos[(scan_name, pos)]["cut_name"]
         else:
             return None
 
     # def __repr__(self):
     #     return f"{self.__class__}({pp(self.__dict__)})"
-        # return f"{self.dataframe_with_crop_name}"
+        # return f"{self.dataframe_with_cut_name}"
 
 
 class ParseDataframe(MetaInfo):
@@ -268,17 +268,17 @@ class ParseDataframe(MetaInfo):
         self.big_frame.astype({'Number of pixels': 'float'})
         self.big_frame.to_csv(self.basedir.joinpath("global_merge_split_info.csv"), index=False, sep=",", float_format="%.6f")
         self.ml_classes = [elm for elm in self.big_frame['Class'].unique().tolist() if elm != "leaf"]
-        self.get_all_merge(group=[self.header[0], self.header[1], "crop_name", "leaf_ID"], aggregated_leaves=False)
-        self.get_all_merge(group=[self.header[0], self.header[1], "crop_name"], aggregated_leaves=True)
+        self.get_all_merge(group=[self.header[0], self.header[1], "cut_name", "leaf_ID"], aggregated_leaves=False)
+        self.get_all_merge(group=[self.header[0], self.header[1], "cut_name"], aggregated_leaves=True)
 
     def get_all_merge(self, group=None, aggregated_leaves=False):
         self.get_leaves_dataframe(group=group)
         if aggregated_leaves:
-            on_list = [self.header[0], self.header[1], "crop_name", "number_of_leaves", f"leaves_area_{self.calibration}", "leaves_number_pixel"]
+            on_list = [self.header[0], self.header[1], "cut_name", "number_of_leaves", f"leaves_area_{self.calibration}", "leaves_number_pixels"]
             csv_path_file = self.basedir.joinpath(f"global-merge-ALL_aggregated_leaves.csv").as_posix()
             self.logger.info(f"Merge all files aggregated leaves to {csv_path_file}")
         else:
-            on_list = [self.header[0], self.header[1], "crop_name", "number_of_leaves", "leaf_ID", f"leaves_area_{self.calibration}", "leaves_number_pixel"]
+            on_list = [self.header[0], self.header[1], "cut_name", "number_of_leaves", "leaf_ID", f"leaves_area_{self.calibration}", "leaves_number_pixels"]
             csv_path_file = self.basedir.joinpath(f"global-merge-ALL_by_leaves.csv").as_posix()
             self.logger.info(f"Merge all files by leaves to {csv_path_file}")
 
@@ -288,7 +288,7 @@ class ParseDataframe(MetaInfo):
         all_merge_df = all_merge[0]
         for df_ in all_merge[1:]:
             all_merge_df = all_merge_df.merge(df_, on=on_list)
-        all_merge_df = pd.merge(self.dataframe_with_crop_name, all_merge_df, on=[self.header[0], self.header[1], "crop_name"], how='inner')
+        all_merge_df = pd.merge(self.dataframe_with_cut_name, all_merge_df, on=[self.header[0], self.header[1], "cut_name"], how='inner')
         all_merge_df.sort_values([self.header[0], self.header[1]], ascending=(True, True)).fillna(0, inplace=True)
         all_merge_df.to_csv(csv_path_file, index=False, sep=",", float_format='%.6f', na_rep=0)
 
@@ -314,7 +314,7 @@ class ParseDataframe(MetaInfo):
         self.df_leaves = self.big_frame.query("Class=='leaf'").groupby(group).agg(
             {f"Area 2D ({self.calibration})": [("number_of_leaves", "count"),
                                                (f"leaves_area_{self.calibration}", "sum")],
-             "Number of pixels": [("leaves_number_pixel", "sum")],       # TODO add to final dataframe
+             "Number of pixels": [("leaves_number_pixels", "sum")],
              }).droplevel(0, axis=1).reset_index()
 
         self.df_leaves.columns = self.flatten_columns(self.df_leaves, sep="")
@@ -349,9 +349,9 @@ class ParseDataframe(MetaInfo):
         # return f"{self.__class__}({pp(self.__dict__)})"
 
 
-class CropAndCutImages:
+class DrawAndCutImages:
     """
-    Object to crop and cut scan images on folder.
+    Object to cut and cut scan images on folder.
     There are able to draw lines to show the cut result before real cut.
     When cut use dataframe to rename scan images
     """
@@ -363,23 +363,23 @@ class CropAndCutImages:
 
         Args:
             scan_folder (:obj:`str`): Path to scan images
-            rename (:obj:`list`): List of columns header used to rename crop image (default first 2 columns)
+            rename (:obj:`list`): List of columns header used to rename cut image (default first 2 columns)
             extension (:obj:`str`): The scan images extension, must be the same for all scan. allow extension are:[
             "jpg", "JPG", "PNG", "png", "BMP", "bmp", "tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]
-            x_pieces (:obj:`int`): Number of vertical crop
-            y_pieces (:obj:`int`): Number of horizontal crop
+            x_pieces (:obj:`int`): Number of vertical cut
+            y_pieces (:obj:`int`): Number of horizontal cut
             top (:obj:`int`): The top marge to remove before cut
             left (:obj:`int`): The left marge to remove before cut
             bottom (:obj:`int`): The bottom marge to remove before cut
             right (:obj:`int`): The right marge to remove before cut
             noise_remove (:obj:`boolean`): use IPSDK unionLinearOpening2dImg function to remove small objet noise (
             default value 3)
-            numbering (:obj:`str`): if right (default), the output order crop is left to right, if bottom,
+            numbering (:obj:`str`): if right (default), the output order cut is left to right, if bottom,
             the output order is top to bottom then left
             plant_model (:obj:`str`): The plant model name (rice or banana)
             force_rerun (:obj:`boolean`): even files existed, rerun draw and/or cut
         """
-        self.logger = logging.getLogger('CropAndCutImages')
+        self.logger = logging.getLogger('DrawAndCutImages')
         # input
         self.__scan_folder = Path(scan_folder)
         self.rename_order = rename
@@ -406,7 +406,7 @@ class CropAndCutImages:
         # call functions
         self.__check_input()
         message = ", ".join([f"{key}:{value}" for key, value in self.params.items()])
-        self.logger.info(f"CropImage parameters: {message}")
+        self.logger.info(f"CutImage parameters: {message}")
 
     def __check_input(self):
         """ check inputs values"""
@@ -431,15 +431,15 @@ class CropAndCutImages:
         except Exception as e:
             self.logger.error(e)
 
-    def loop_crop(self, cutdir_name, csv_file):
-        """Run crop on images files
+    def loop_cut(self, cutdir_name, csv_file):
+        """Run cut on images files
 
         Args:
-            cutdir_name (:obj:`str`): the output directory to store crop images
+            cutdir_name (:obj:`str`): the output directory to store cut images
             csv_file (:obj:`str`): The file use to rename images
         """
         def save_image(img, pos):
-            basename = self.meta_info.meta_to_crop_rename(scan_name=img, pos=pos)
+            basename = self.meta_info.meta_to_cut_rename(scan_name=img, pos=pos)
             file_name = cut_dir_path.joinpath(f"{basename}.tif")
             if basename and not Path(file_name).exists():
                 imageIP = util.getROI2dImg(im_borderless, *box)
@@ -500,7 +500,7 @@ class CropAndCutImages:
         self.logger.info("~~~~~~~~~ END STEP CUT ~~~~~~~~~")
 
     def loop_draw(self, draw_dir_name):
-        """draw lines before crop
+        """draw lines before cut
 
         Args:
             draw_dir_name (:obj:`str`): the output directory to store draw images
@@ -557,7 +557,7 @@ class AnalysisImages:
             model_name (:obj:`int`): The IPSDK PixelClassification model name build with Explorer
             model_name_classification (:obj:`int`): The IPSDK Classification model name build with Explorer
             csv_file (:obj:`str`): The file use to rename images
-            rename (:obj:`list`): List of columns header used to rename crop image (default first 2 columns)
+            rename (:obj:`list`): List of columns header used to rename cut image (default first 2 columns)
             calibration_name (:obj:`str`): Name of Explorer calibration, no calibration if empty
             small_object (:obj:`int`): The minimum area of class, to remove small noise detect object Default: 100
             border (:obj:`int`): The diameter of the brush (in pixels) used to erode the leaf Default: 0
@@ -923,8 +923,8 @@ class AnalysisImages:
 
     def __append_col_df(self, basename, df):
         # print(f"APPEND DF {basename} {df}")
-        df.insert(0, "crop_name", basename)
-        df_merge = pd.merge(self.meta_info.dataframe_with_crop_name, df, on="crop_name")  # ,how="outer")
+        df.insert(0, "cut_name", basename)
+        df_merge = pd.merge(self.meta_info.dataframe_with_cut_name, df, on="cut_name")  # ,how="outer")
         return df_merge
 
     def __build_df_split(self, basename, result_separated=None):
@@ -955,10 +955,10 @@ class AnalysisImages:
         else:
             # split PCA RGB
             imagePCA, eigenValues, eigenVectors, matrixRank = classif.pcaReductionImg(loaded_image)
-            if self.plant_model == "banana":
-                img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
-            elif self.plant_model == "rice":
-                img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
+            # if self.plant_model == "banana":
+            #     img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
+            # elif self.plant_model == "rice":
+            img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
             # ui.displayImg(img1, pause=True)
 
             # clusterisation and binarisation
@@ -1315,9 +1315,9 @@ class Leaf:
 class LeAFtool:
     def __init__(self, config_file=None, debug=None):
 
-        self.AVAIL_TOOLS = ["draw", "crop", "ML", "merge"]
+        self.AVAIL_TOOLS = ["draw", "cut", "ML", "merge"]
         self.__allow_ext = ["jpg", "JPG", "PNG", "png", "BMP", "bmp", "tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]
-        self.crop_obj = None
+        self.cut_obj = None
         self.analysis = None
         self.plant_model = None
         self.__allow_plant_model = ["banana", "rice"]
@@ -1532,38 +1532,38 @@ class LeAFtool:
         # check tools activation
         self.tools = self.__build_tools_activated("RUNSTEP", self.AVAIL_TOOLS, True)
 
-        # if Draw or Crop
-        if "draw" in self.tools or "crop" in self.tools:
-            self.__check_dir(section="DRAWCROP", key="images_path")
-            self.__check_dir(section="DRAWCROP", key="out_draw_dir", makedir=True)
-            self.__get_allow_extension(section="DRAWCROP", key="extension")
-            self.crop_obj = CropAndCutImages(scan_folder=self.get_config_value(section="DRAWCROP", key="images_path"),
+        # if Draw or Cut
+        if "draw" in self.tools or "cut" in self.tools:
+            self.__check_dir(section="DRAW-CUT", key="images_path")
+            self.__check_dir(section="DRAW-CUT", key="out_draw_dir", makedir=True)
+            self.__get_allow_extension(section="DRAW-CUT", key="extension")
+            self.cut_obj = DrawAndCutImages(scan_folder=self.get_config_value(section="DRAW-CUT", key="images_path"),
                                              rename=self.get_config_value(section="rename"),
-                                             extension=self.get_config_value(section="DRAWCROP", key="extension"),
-                                             x_pieces=self.get_config_value(section="DRAWCROP", key="x_pieces"),
-                                             y_pieces=self.get_config_value(section="DRAWCROP", key="y_pieces"),
-                                             top=self.get_config_value(section="DRAWCROP", key="top"),
-                                             left=self.get_config_value(section="DRAWCROP", key="left"),
-                                             bottom=self.get_config_value(section="DRAWCROP", key="bottom"),
-                                             right=self.get_config_value(section="DRAWCROP", key="right"),
-                                             noise_remove=self.__var_2_bool("DRAWCROP", "noise_remove",
+                                             extension=self.get_config_value(section="DRAW-CUT", key="extension"),
+                                             x_pieces=self.get_config_value(section="DRAW-CUT", key="x_pieces"),
+                                             y_pieces=self.get_config_value(section="DRAW-CUT", key="y_pieces"),
+                                             top=self.get_config_value(section="DRAW-CUT", key="top"),
+                                             left=self.get_config_value(section="DRAW-CUT", key="left"),
+                                             bottom=self.get_config_value(section="DRAW-CUT", key="bottom"),
+                                             right=self.get_config_value(section="DRAW-CUT", key="right"),
+                                             noise_remove=self.__var_2_bool("DRAW-CUT", "noise_remove",
                                                                             to_convert=self.get_config_value(
-                                                                                section="DRAWCROP",
+                                                                                section="DRAW-CUT",
                                                                                 key="noise_remove")),
-                                             numbering=self.get_config_value(section="DRAWCROP", key="numbering"),
+                                             numbering=self.get_config_value(section="DRAW-CUT", key="numbering"),
                                              plant_model=self.plant_model,
-                                             force_rerun=self.__var_2_bool("DRAWCROP", "force_rerun",
+                                             force_rerun=self.__var_2_bool("DRAW-CUT", "force_rerun",
                                                                            to_convert=self.get_config_value(
-                                                                               section="DRAWCROP", key="force_rerun")),
+                                                                               section="DRAW-CUT", key="force_rerun")),
                                              )
             if self.config["RUNSTEP"]["draw"]:
-                self.crop_obj.loop_draw(draw_dir_name=self.get_config_value(section="DRAWCROP", key="out_draw_dir"))
-            if self.config["RUNSTEP"]["crop"]:
-                self.crop_obj.loop_crop(cutdir_name=self.get_config_value(section="DRAWCROP", key="out_cut_dir"),
+                self.cut_obj.loop_draw(draw_dir_name=self.get_config_value(section="DRAW-CUT", key="out_draw_dir"))
+            if self.config["RUNSTEP"]["cut"]:
+                self.cut_obj.loop_cut(cutdir_name=self.get_config_value(section="DRAW-CUT", key="out_cut_dir"),
                                         csv_file=self.get_config_value(section="csv_file")
                                         )
         if ("ML" in self.tools or "merge" in self.tools) and (
-                not self.crop_obj or (self.crop_obj and self.crop_obj.exit_status)):
+                not self.cut_obj or (self.cut_obj and self.cut_obj.exit_status)):
             self.__check_dir(section="ML", key="images_path")
             self.analysis = AnalysisImages(scan_folder=self.get_config_value(section="ML", key="images_path"),
                                            model_name=self.get_config_value(section="ML", key="model_name"),
