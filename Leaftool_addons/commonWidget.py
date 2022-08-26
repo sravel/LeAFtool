@@ -1,17 +1,18 @@
 import logging
 import sys, os, traceback
-
 from PyQt5.QtCore import Qt, QCoreApplication
 import PyQt5.QtWidgets as qt
 from PyQt5 import QtGui, QtCore
 from pathlib import Path
 import pandas as pd
 import re
+import gc
 from docutils.core import publish_parts, publish_string
 
 sys.path.insert(0, Path("../").as_posix())
 
 import PyIPSDK
+import PyIPSDK.IPSDKUI as ui
 import UsefullVariables as vrb
 import UsefullWidgets as wgt
 import UsefullFunctions as fct
@@ -97,7 +98,7 @@ class Documentator:
                     self.dico_doc_rst[key] = self.dico_doc_rst[key]+"\n\n\n"+line
         self.dico_doc = {}
         for key, value in self.dico_doc_rst.items():
-            self.dico_doc[key] = publish_parts(value, writer_name='html')['html_body'].replace("<img", "<p><img").replace("</div>", "</p></div>")
+            self.dico_doc[key] = publish_parts(value.replace("./docs/", f"{vrb.folderMacroInterface}/LeAFtool/docs/"), writer_name='html')['html_body'].replace("<img", "<p><img").replace("</div>", "</p></div>")
             # self.dico_doc[key] = publish_string(value, writer_name='html', settings_overrides={'output_encoding': 'utf-8'}).decode()
 
 
@@ -203,7 +204,7 @@ class TableWidget(qt.QTableWidget):
         self.ddict = ddict
         self.indice_cut_name = None
         self.indice_class_name = None
-        self.old_selection = [0,0]
+        self.old_selection = [None, None]
         self.setSizePolicy(qt.QSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding))
         self.path_images = path_images
 
@@ -225,7 +226,7 @@ class TableWidget(qt.QTableWidget):
             self.setColumnCount(len(self.ddict))
             col = 0
             for indice, name in enumerate(self.ddict):
-                if name == "cut_name":
+                if name in ["cut_name", "crop_name"]:
                     self.indice_cut_name = indice
                 if name == "Class":
                     self.indice_class_name = indice
@@ -248,7 +249,8 @@ class TableWidget(qt.QTableWidget):
                     row += 1
                 self.resizeColumnToContents(col)
                 col += 1
-        except:
+        except Exception as e:
+            print(e)
             pass
 
     def display(self, boolShow=True):
@@ -308,10 +310,8 @@ class TableWidget(qt.QTableWidget):
                                     vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText(f"{class_label}_overlay")
                         except:
                             pass
-
                 except:
                     traceback.print_exc(file=sys.stderr)
-
 
 if __name__ == '__main__':
 

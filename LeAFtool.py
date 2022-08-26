@@ -10,6 +10,9 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QToolTip
 from PyQt5.QtGui import QFont
 
+# auto add Explorer in PYTHONPATH
+explorer_path = Path("/home/sebastien/Documents/IPSDK/Explorer_3_1_0_3_linux/Explorer/Interface").as_posix()
+sys.path.insert(0, explorer_path)
 
 import UsefullVariables as vrb
 import UsefullWidgets as wgt
@@ -360,7 +363,7 @@ class LeaftoolParams(qt.QGroupBox):
         self.run.setStatusTip(self.parent.parent.dico_doc_str["run"])
 
         self.preview_yaml_checkbox = qt.QCheckBox()
-        self.preview_yaml_checkbox.setChecked(True)
+        self.preview_yaml_checkbox.setChecked(False)
         self.preview_yaml_checkbox.setText("Preview YAML")
         self.preview_yaml_checkbox.setFixedSize(int(120 * vrb.ratio), int(30 * vrb.ratio))
         self.preview_yaml_checkbox.setWhatsThis(self.parent.parent.dico_doc["preview"])
@@ -483,7 +486,7 @@ class RunLeAFtool(qt.QWidget):
         self.layer_leaftool_params.upload.clicked.connect(self.upload_yaml)
         self.layer_leaftool_params.save.clicked.connect(self.save_yaml)
         self.layer_leaftool_params.run.clicked.connect(self.change_run_state)
-        qt.QtWidgets.QApplication.instance().focusChanged.connect(self.on_focus_changed)
+        qt.QApplication.instance().focusChanged.connect(self.on_focus_changed)
 
     def change_run_state(self):
         if self.layer_leaftool_params.run.isChecked():
@@ -750,10 +753,13 @@ except:
     pass
 
 if __name__ == '__main__':
+    from PyQt5.QtGui import QPixmap,QIcon
+    from PyQt5.QtCore import QCoreApplication
+    from PyQt5.QtWidgets import QApplication, QSplashScreen
 
     app = QCoreApplication.instance()
     if app is None:
-        app = qt.QApplication([])
+        app = QApplication([])
 
     sys._excepthook = sys.excepthook
 
@@ -764,6 +770,15 @@ if __name__ == '__main__':
         sys.exit(1)
 
 
+    pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
+    from PyQt5.QtCore import Qt
+    pixmap = pixmap.scaled(600, 600, aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
+    splashScreen = QSplashScreen(pixmap)
+    splashScreen.setFixedSize(600, 600)
+    splashScreen.show()
+    app.processEvents()
+    app.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon_old.png"))
+
     sys.excepthook = exception_hook
     qt.QApplication.setStyle(qt.QStyleFactory.create('Fusion'))  # <- Choose the style
     # foo = FileSelectorLeaftool("test")
@@ -773,5 +788,6 @@ if __name__ == '__main__':
     # foo = RunLeAFtool()
     # foo = NumberLineEditLabel(constraint="Natural", text="0", label="Y pieces:")
     # foo.showFullScreen()
+    splashScreen.finish(foo)
     foo.show()
     app.exec_()
