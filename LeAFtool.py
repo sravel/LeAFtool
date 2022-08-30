@@ -662,10 +662,10 @@ class MainInterface(qt.QMainWindow):
         self.logo_label = qt.QLabel(self)
         self.logo_img = QtGui.QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
 
-        self.logo_img = self.logo_img.scaledToHeight(60, mode=Qt.FastTransformation)
+        self.logo_img = self.logo_img.scaledToHeight(70, mode=Qt.FastTransformation)
         self.logo_label.setPixmap(self.logo_img)
         self.logo_label.setAlignment(Qt.AlignCenter)
-        self.logo_label.setMaximumHeight(60)
+        self.logo_label.setMaximumHeight(70)
 
         # Initialize the 2 tab screen
         self.tabs = qt.QTabWidget()
@@ -691,8 +691,8 @@ class MainInterface(qt.QMainWindow):
         self.tab2 = table_group
 
         # Add th 2 tables to object TABS
-        self.tabs.addTab(self.tab1, "Run LeAFtool")
-        self.tabs.addTab(self.tab2, "Explore Results")
+        self.tabs.addTab(self.tab1, "   Run LeAFtool   ")
+        self.tabs.addTab(self.tab2, "   Explore Results   ")
 
         # add TABS to layout
         self.layout.addWidget(self.logo_label, Qt.AlignCenter)
