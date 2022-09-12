@@ -742,9 +742,12 @@ class MainInterface(qt.QMainWindow):
 def openWidget():
     main_interface = None
     if not main_interface:
+        splashScreen = seeSplashScreen()
         main_interface = MainInterface()
+        main_interface.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
+        splashScreen.finish(main_interface)
     main_interface.showMaximized()
-    fct.showWidget(main_interface)
+    # fct.showWidget(main_interface)
 
 
 try:
@@ -752,10 +755,23 @@ try:
 except:
     pass
 
-if __name__ == '__main__':
+
+def seeSplashScreen():
     from PyQt5.QtGui import QPixmap,QIcon
+    from PyQt5.QtWidgets import QSplashScreen
+    pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
+    from PyQt5.QtCore import Qt
+    pixmap = pixmap.scaled(600, 600, aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
+    splashScreen = QSplashScreen(pixmap)
+    splashScreen.setFixedSize(600, 600)
+    splashScreen.show()
+    return splashScreen
+
+
+if __name__ == '__main__':
+
     from PyQt5.QtCore import QCoreApplication
-    from PyQt5.QtWidgets import QApplication, QSplashScreen
+    from PyQt5.QtWidgets import QApplication
 
     app = QCoreApplication.instance()
     if app is None:
@@ -763,21 +779,14 @@ if __name__ == '__main__':
 
     sys._excepthook = sys.excepthook
 
-
     def exception_hook(exctype, value, traceback):
         print(exctype, value, traceback)
         sys._excepthook(exctype, value, traceback)
         sys.exit(1)
 
-
-    pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
-    from PyQt5.QtCore import Qt
-    pixmap = pixmap.scaled(600, 600, aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
-    splashScreen = QSplashScreen(pixmap)
-    splashScreen.setFixedSize(600, 600)
-    splashScreen.show()
+    splashScreen = seeSplashScreen()
     app.processEvents()
-    app.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon_old.png"))
+    app.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
 
     sys.excepthook = exception_hook
     qt.QApplication.setStyle(qt.QStyleFactory.create('Fusion'))  # <- Choose the style
