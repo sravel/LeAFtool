@@ -1,6 +1,7 @@
-from PyQt5.QtCore import Qt
 import PyQt5.QtWidgets as qt
 import UsefullVariables as vrb
+from PyQt5.QtCore import Qt, QCoreApplication
+
 from Leaftool_addons.commonWidget import NumberLineEditLabel, FileSelectorLeaftool, style, get_files_ext, allow_ext
 
 
@@ -238,26 +239,12 @@ class DrawCutParams(qt.QGroupBox):
             self.images_ext.setVisible(True)
 
 
+###############################################################################################
+# MAIN
 if __name__ == '__main__':
-    from PyQt5.QtCore import Qt, QCoreApplication
-    import sys
-
     app = QCoreApplication.instance()
     if app is None:
         app = qt.QApplication([])
-
-    sys._excepthook = sys.excepthook
-
-
-    def exception_hook(exctype, value, traceback):
-        print(exctype, value, traceback)
-        sys._excepthook(exctype, value, traceback)
-        sys.exit(1)
-
-    sys.excepthook = exception_hook
-
     foo = DrawCutParams(parent=None)
-
-    # foo.showMaximized()
     foo.show()
     app.exec_()
