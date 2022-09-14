@@ -1,25 +1,27 @@
 import logging.config
-import sys
+from sys import path as syspath
 import subprocess
 from pathlib import Path
-from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
-from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5 import QtGui, Qsci
+from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot, QObject, pyqtSignal
+from PyQt5.QtGui import QIcon, QPixmap, QColor
+from PyQt5.Qsci import QsciScintilla, QsciLexerYAML
 import PyQt5.QtWidgets as qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QToolTip
-from PyQt5.QtGui import QFont
+
+import PyIPSDK
+
 
 # auto add Explorer in PYTHONPATH
-explorer_path = Path("/home/sebastien/Documents/IPSDK/Explorer_3_1_0_3_linux/Explorer/Interface").as_posix()
-sys.path.insert(0, explorer_path)
+explorer_path = Path(PyIPSDK.getPyIPSDKDir()).parent.parent.joinpath("Explorer", "Interface")
+syspath.insert(0, explorer_path.as_posix())
 
+# import explorer variables/functions
 import UsefullVariables as vrb
 import UsefullWidgets as wgt
 import UsefullFunctions as fct
 import DatabaseFunction as Dfct
 
-sys.path.insert(0, Path(vrb.folderMacroInterface + "/LeAFtool/").as_posix())
+# add plugin LeAFtool to PYTHONPATH
+syspath.insert(0, Path(vrb.folderMacroInterface + "/LeAFtool/").as_posix())
 
 # Import LeAFtool class
 from Leaftool_addons.DrawCut import DrawCutParams
@@ -27,7 +29,7 @@ from Leaftool_addons.MachineLearning import MachineLearningParams
 from Leaftool_addons.commonWidget import style, scroll_style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool, Documentator
 from Leaftool_addons.cmd_LeAFtool import *
 
-
+# configure logger
 logging.config.dictConfig({
             'version': 1,
             'disable_existing_loggers': False,
@@ -46,19 +48,7 @@ logging.config.dictConfig({
                 },
             }
         })
-
 logger = logging.getLogger('LeAFtool GUI')
-
-try:
-    mainWindow = vrb.mainWindow
-    groupMenu = mainWindow.groupMenu
-    button = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png")
-    button.setFixedSize(30 * vrb.ratio, 30 * vrb.ratio)
-    groupMenu.layoutBar1.addWidget(button, 0, vrb.numMacro, Qt.AlignVCenter)
-    vrb.numMacro += 1
-except:
-    # traceback.print_exc(file=sys.stderr)
-    pass
 
 
 class QTextEditLogger(logging.Handler, QObject):
@@ -98,24 +88,24 @@ class QTextEditLogger(logging.Handler, QObject):
         self.widget.clear()
 
 
-class YAMLEditor(Qsci.QsciScintilla):
+class YAMLEditor(QsciScintilla):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.setLexer(Qsci.QsciLexerYAML(self))
+        self.setLexer(QsciLexerYAML(self))
         self.setReadOnly(True)
         # Set the zoom factor, the factor is in points.
         self.zoomTo(2)
         # line numbers margin colors
-        self.setMarginsBackgroundColor(QtGui.QColor("#323232"))
-        self.setMarginsForegroundColor(QtGui.QColor("#323232"))
+        self.setMarginsBackgroundColor(QColor("#323232"))
+        self.setMarginsForegroundColor(QColor("#323232"))
         # Use boxes as folding visual
         self.setFolding(self.BoxedTreeFoldStyle)
         # Braces matching
         self.setBraceMatching(self.SloppyBraceMatch)
         # folding margin colors (foreground,background)
-        self.setFoldMarginColors(QtGui.QColor("#929292"),
-                                 QtGui.QColor("#323232"))
+        self.setFoldMarginColors(QColor("#929292"),
+                                 QColor("#323232"))
         # Show whitespace to help detect whitespace errors
         self.setWhitespaceVisibility(True)
         self.setIndentationGuides(True)
@@ -492,14 +482,14 @@ class RunLeAFtool(qt.QWidget):
         if self.layer_leaftool_params.run.isChecked():
             if self.save_yaml():
                 self.layer_leaftool_params.run_label.setText("Stop:")
-                self.layer_leaftool_params.run.pixmap = QtGui.QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/stop.png")
+                self.layer_leaftool_params.run.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/stop.png")
                 self.layer_leaftool_params.run.resizeEvent(None)
                 self.start_threads()
             else:
                 self.layer_leaftool_params.run.setChecked(False)
         else:
             self.layer_leaftool_params.run_label.setText("Run:")
-            self.layer_leaftool_params.run.pixmap = QtGui.QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/run.png")
+            self.layer_leaftool_params.run.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/run.png")
             self.layer_leaftool_params.run.resizeEvent(None)
             self.layer_leaftool_params.run.setChecked(False)
             self.abort_workers()
@@ -572,7 +562,7 @@ class RunLeAFtool(qt.QWidget):
         if not self.dict_for_yaml["RUNSTEP"]["merge"] and "MERGE" in self.dict_for_yaml:
             self.dict_backup.update({"MERGE": self.dict_for_yaml["MERGE"]})
             del self.dict_for_yaml["MERGE"]
-        elif self.dict_for_yaml["RUNSTEP"]["merge"] and not "MERGE" in self.dict_for_yaml:
+        elif self.dict_for_yaml["RUNSTEP"]["merge"] and "MERGE" not in self.dict_for_yaml:
             self.dict_for_yaml.update({"MERGE": self.dict_backup["MERGE"]})
 
         # For Draw/cut
@@ -606,7 +596,7 @@ class RunLeAFtool(qt.QWidget):
         if filename != "" and filename:
             self.yaml_path = filename
             self.load_yaml()
-            Dfct.SubElement(vrb.userPathElement, "ImportImages").text = os.path.dirname(filename)
+            Dfct.SubElement(vrb.userPathElement, "ImportImages").text = Path(filename).parent.as_posix()
             Dfct.saveXmlElement(vrb.userPathElement, vrb.folderInformation + "/UserPath.mho", forceSave=True)
         else:
             self.logger.error("Error: Please select file")
@@ -620,7 +610,7 @@ class RunLeAFtool(qt.QWidget):
             self.yaml_path = filename
             with open(self.yaml_path, "w") as write_yaml:
                 write_yaml.write(self.export_use_yaml)
-            Dfct.SubElement(vrb.userPathElement, "ImportImages").text = os.path.dirname(filename)
+            Dfct.SubElement(vrb.userPathElement, "ImportImages").text = Path(filename).parent.as_posix()
             Dfct.saveXmlElement(vrb.userPathElement, vrb.folderInformation + "/UserPath.mho", forceSave=True)
             return True
         else:
@@ -645,8 +635,6 @@ class MainInterface(qt.QMainWindow):
         self.statusbar = self.statusBar()
         self.statusbar.setSizeGripEnabled(False)
 
-        # QToolTip.setFont(QFont('SansSerif', 20))
-
         # Layout Style
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.layout = qt.QVBoxLayout(self.main)
@@ -660,7 +648,7 @@ class MainInterface(qt.QMainWindow):
         self.setWindowTitle("LeAFtool")
         self.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
         self.logo_label = qt.QLabel(self)
-        self.logo_img = QtGui.QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
+        self.logo_img = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
 
         self.logo_img = self.logo_img.scaledToHeight(70, mode=Qt.FastTransformation)
         self.logo_label.setPixmap(self.logo_img)
@@ -739,6 +727,15 @@ class MainInterface(qt.QMainWindow):
             self.table_final.clear()
 
 
+def seeSplashScreen():
+    pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
+    pixmap = pixmap.scaled(600, 600, aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
+    splashScreen = qt.QSplashScreen(pixmap)
+    splashScreen.setFixedSize(600, 600)
+    splashScreen.show()
+    return splashScreen
+
+
 def openWidget():
     main_interface = None
     if not main_interface:
@@ -746,57 +743,42 @@ def openWidget():
         main_interface = MainInterface()
         main_interface.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
         splashScreen.finish(main_interface)
-    main_interface.showMaximized()
+    main_interface.show()
     # fct.showWidget(main_interface)
 
 
-try:
+###############################################################################################
+# For adding button on Explorer
+mainWindow = vrb.mainWindow
+if mainWindow:
+    groupMenu = mainWindow.groupMenu
+    button = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png")
+    button.setFixedSize(30 * vrb.ratio, 30 * vrb.ratio)
+    groupMenu.layoutBar1.addWidget(button, 0, vrb.numMacro, Qt.AlignVCenter)
+    vrb.numMacro += 1
     button.clicked.connect(openWidget)
-except:
-    pass
 
 
-def seeSplashScreen():
-    from PyQt5.QtGui import QPixmap,QIcon
-    from PyQt5.QtWidgets import QSplashScreen
-    pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
-    from PyQt5.QtCore import Qt
-    pixmap = pixmap.scaled(600, 600, aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
-    splashScreen = QSplashScreen(pixmap)
-    splashScreen.setFixedSize(600, 600)
-    splashScreen.show()
-    return splashScreen
-
-
+###############################################################################################
+# MAIN
 if __name__ == '__main__':
-
-    from PyQt5.QtCore import QCoreApplication
-    from PyQt5.QtWidgets import QApplication
-
     app = QCoreApplication.instance()
     if app is None:
-        app = QApplication([])
-
-    sys._excepthook = sys.excepthook
-
-    def exception_hook(exctype, value, traceback):
-        print(exctype, value, traceback)
-        sys._excepthook(exctype, value, traceback)
-        sys.exit(1)
+        app = qt.QApplication([])
 
     splashScreen = seeSplashScreen()
     app.processEvents()
     app.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
 
-    sys.excepthook = exception_hook
     qt.QApplication.setStyle(qt.QStyleFactory.create('Fusion'))  # <- Choose the style
-    # foo = FileSelectorLeaftool("test")
-    # foo = DataExplorer()
-    # foo = ToolsActivation(parent=RunLeAFtool)
-    foo = MainInterface()
-    # foo = RunLeAFtool()
-    # foo = NumberLineEditLabel(constraint="Natural", text="0", label="Y pieces:")
-    # foo.showFullScreen()
-    splashScreen.finish(foo)
-    foo.show()
+    main_interface = MainInterface()
+
+    # main_interface = FileSelectorLeaftool("test")
+    # main_interface = DataExplorer()
+    # main_interface = ToolsActivation(parent=RunLeAFtool)
+    # main_interface = RunLeAFtool()
+    # main_interface = NumberLineEditLabel(constraint="Natural", text="0", label="Y pieces:")
+    # main_interface.showFullScreen()
+    splashScreen.finish(main_interface)
+    main_interface.show()
     app.exec_()
