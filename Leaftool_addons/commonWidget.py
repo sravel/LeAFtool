@@ -1,18 +1,16 @@
-import logging
-import sys, os, traceback
-from PyQt5.QtCore import Qt, QCoreApplication
+from sys import path as syspath
+from PyQt5.QtGui import QColor
+from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
 import PyQt5.QtWidgets as qt
-from PyQt5 import QtGui, QtCore
-from pathlib import Path
-import pandas as pd
-import re
-import gc
-from docutils.core import publish_parts, publish_string
 
-sys.path.insert(0, Path("../").as_posix())
+from pathlib import Path
+from pandas import read_csv
+from re import match
+from docutils.core import publish_parts
+
+syspath.insert(0, Path("../").as_posix())
 
 import PyIPSDK
-import PyIPSDK.IPSDKUI as ui
 import UsefullVariables as vrb
 import UsefullWidgets as wgt
 import UsefullFunctions as fct
@@ -37,12 +35,13 @@ QScrollBar:vertical
       border: 1px solid #222222;
 }"""
 
+
 def return_default_folder():
     defaultFolder = Dfct.childText(vrb.userPathElement, "ImportImages")
-    if defaultFolder is None or defaultFolder == "" or not os.path.exists(defaultFolder):
-        defaultFolder = os.path.dirname(vrb.folderExplorer) + "/images"
-        if not os.path.exists(defaultFolder):
-            defaultFolder = os.path.dirname(vrb.folderExplorer) + "/data/Explorer/images"
+    if defaultFolder is None or defaultFolder == "" or not Path(defaultFolder).exists():
+        defaultFolder = Path(vrb.folderExplorer).parent.joinpath("images")
+        if not Path(defaultFolder).exists():
+            defaultFolder = Path(vrb.folderExplorer).parent.joinpath("data", "Explorer", "images")
     return defaultFolder
 
 
@@ -88,7 +87,7 @@ class Documentator:
         key = None
         with open(f"{vrb.folderMacroInterface}/LeAFtool/docs/params.rst", "r") as docs:
             for line in docs:
-                if re.match("^- \*\*", line):
+                if match("^- \*\*", line):
                     key, value = line.rstrip().split(" ")[1].replace("*", ""), line.rstrip().replace("- ", "")
                     self.dico_doc_rst[key] = value
                     self.dico_doc_str[key] = value.replace("*", "")
@@ -99,11 +98,10 @@ class Documentator:
         self.dico_doc = {}
         for key, value in self.dico_doc_rst.items():
             self.dico_doc[key] = publish_parts(value.replace("./docs/", f"{vrb.folderMacroInterface}/LeAFtool/docs/"), writer_name='html')['html_body'].replace("<img", "<p><img").replace("</div>", "</p></div>")
-            # self.dico_doc[key] = publish_string(value, writer_name='html', settings_overrides={'output_encoding': 'utf-8'}).decode()
 
 
 class FileSelectorLeaftool(qt.QGroupBox):
-    """add file selector buttom"""
+    """add file selector button"""
 
     def __init__(self, label, title=None, style="minimal", file=False):
         super().__init__()
@@ -145,9 +143,9 @@ class FileSelectorLeaftool(qt.QGroupBox):
         defaultFolder = return_default_folder()
         if self.is_file:
             filename = qt.QFileDialog.getOpenFileName(self, caption="Select your file",
-                                           directory=defaultFolder,
-                                           filter="table file (*.csv *.tsv)")
-                                           # options=qt.QFileDialog.DontUseNativeDialog)
+                                                      directory=defaultFolder,
+                                                      filter="table file (*.csv *.tsv)")
+            # options=qt.QFileDialog.DontUseNativeDialog)
             filename = filename[0]
         else:
             dlg.setOption(dlg.ShowDirsOnly, True)
@@ -156,13 +154,10 @@ class FileSelectorLeaftool(qt.QGroupBox):
                                                 directory=defaultFolder)
 
         if filename != "" and filename:
-            try:
-                self.lineEditFile.setText(filename)
-                self.lineEditFile.setFocus()
-                Dfct.SubElement(vrb.userPathElement, "ImportImages").text = os.path.dirname(filename)
-                Dfct.saveXmlElement(vrb.userPathElement, vrb.folderInformation + "/UserPath.mho", forceSave=True)
-            except:
-                traceback.print_exc(file=sys.stderr)
+            self.lineEditFile.setText(filename)
+            self.lineEditFile.setFocus()
+            Dfct.SubElement(vrb.userPathElement, "ImportImages").text = Path(filename).parent.as_posix()
+            Dfct.saveXmlElement(vrb.userPathElement, vrb.folderInformation + "/UserPath.mho", forceSave=True)
 
 
 class NumberLineEditLabel(qt.QGroupBox):
@@ -192,9 +187,9 @@ class NumberLineEditLabel(qt.QGroupBox):
 def randomPastelColor(i):
     # colors = [171, 54, 114, 5, 231, 187, 254, 7, 214, 192, 50, 258, 48, 56, 107, 255, 33, 34, 177, 246]
     colors = [10, 30, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 255, 33, 34, 177, 246, 171, 54, 114, 5, 231, 187, 254, 7, 214, 192, 50, 258, 48, 56, 107, 255, 33, 34, 177, 246]
-    s = 90
-    l = 90
-    return QtGui.QColor.fromHsl(colors[i], int(s * 255 / 100), int(l * 255 / 100), 100)
+    saturation = 90
+    light = 90
+    return QColor.fromHsl(colors[i], int(saturation * 255 / 100), int(light * 255 / 100), 100)
 
 
 class TableWidget(qt.QTableWidget):
@@ -286,64 +281,43 @@ class TableWidget(qt.QTableWidget):
                 #     class_label = self.item(rowValue, self.indice_class_name).text()
                 # else:
                 class_label = "lesion"
-                try:
-                    nameImageInput = f"{self.path_images}/{text}.tif"
-                    imageInput = PyIPSDK.loadTiffImageFile(nameImageInput)
+                nameImageInput = f"{self.path_images}/{text}.tif"
+                imageInput = PyIPSDK.loadTiffImageFile(nameImageInput)
 
-                    vrb.mainWindow.widgetLabelImage.addNewImage(text, imageInput)
+                vrb.mainWindow.widgetLabelImage.addNewImage(text, imageInput)
 
-                    all_overlay_path = Path(self.path_images).glob(f'*{text}*_overlay_ipsdk.tif')
-                    for file in all_overlay_path:
-                        label = file.stem.split("_")[-3]
-                        image = PyIPSDK.loadTiffImageFile(file.as_posix())
-                        vrb.mainWindow.widgetLabelImage.addNewImage(f"{label}_overlay", image)
+                all_overlay_path = Path(self.path_images).glob(f'*{text}*_overlay_ipsdk.tif')
+                for file in all_overlay_path:
+                    label = file.stem.split("_")[-3]
+                    image = PyIPSDK.loadTiffImageFile(file.as_posix())
+                    vrb.mainWindow.widgetLabelImage.addNewImage(f"{label}_overlay", image)
 
-                    for num in range(
-                            vrb.mainWindow.widgetLabelImage.layout.count()):  # Boucle pour afficher l'image "Image" et l'image "Result" en overlay
-                        try:
-                            item = vrb.mainWindow.widgetLabelImage.layout.itemAt(num)
-                            if item is not None:
-                                label = item.widget()
-                                if label.name == text:
-                                    vrb.mainWindow.changeCurrentXmlElement(label)
-                                    vrb.mainWindow.widgetImage.groupBoxOverlay.checkBoxOverlay.setChecked(True)
-                                    vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText(f"{class_label}_overlay")
-                        except:
-                            pass
-                except:
-                    traceback.print_exc(file=sys.stderr)
-
-if __name__ == '__main__':
-
-    app = QCoreApplication.instance()
-    if app is None:
-        app = qt.QApplication([])
-
-    sys._excepthook = sys.excepthook
-
-
-    def exception_hook(exctype, value, traceback):
-        print(exctype, value, traceback)
-        sys._excepthook(exctype, value, traceback)
-        sys.exit(1)
-
-
-    sys.excepthook = exception_hook
-
-    csv_file = "/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images/global-merge.csv"
-    df = pd.read_csv(csv_file, index_col=None, header=[0], squeeze=True, sep="\t")
-    print(df)
-    ddict = df.to_dict(orient='list')
-    print(ddict)
-    # exit()
-    foo = TableWidget(ddict, path_images="/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images/")
-    foo.showMaximized()
-    app.exec_()
+                for num in range(
+                        vrb.mainWindow.widgetLabelImage.layout.count()):  # Boucle pour afficher l'image "Image" et l'image "Result" en overlay
+                    try:
+                        item = vrb.mainWindow.widgetLabelImage.layout.itemAt(num)
+                        if item is not None:
+                            label = item.widget()
+                            if label.name == text:
+                                vrb.mainWindow.changeCurrentXmlElement(label)
+                                vrb.mainWindow.widgetImage.groupBoxOverlay.checkBoxOverlay.setChecked(True)
+                                vrb.mainWindow.widgetImage.groupBoxOverlay.comboBoxOverlay.setCurrentText(f"{class_label}_overlay")
+                    except Exception as e:
+                        pass
 
 
 class TwoListSelection(qt.QWidget):
     def __init__(self, parent=None):
         super(TwoListSelection, self).__init__(parent)
+        self.mButtonToAvailable = None
+        self.mBtnMoveToSelected = None
+        self.mBtnMoveToAvailable = None
+        self.mButtonToSelected = None
+        self.label = None
+        self.mOuput = None
+        self.mInput = None
+        self.mBtnDown = None
+        self.mBtnUp = None
         self.setup_layout()
 
     def setup_layout(self):
@@ -388,7 +362,7 @@ class TwoListSelection(qt.QWidget):
         self.update_buttons_status()
         self.connections()
 
-    @QtCore.pyqtSlot()
+    @pyqtSlot()
     def update_buttons_status(self):
         self.mBtnUp.setDisabled(not bool(self.mOuput.selectedItems()) or self.mOuput.currentRow() == 0)
         self.mBtnDown.setDisabled(
@@ -406,32 +380,32 @@ class TwoListSelection(qt.QWidget):
         self.mBtnUp.clicked.connect(self.on_mBtnUp_clicked)
         self.mBtnDown.clicked.connect(self.on_mBtnDown_clicked)
 
-    @QtCore.pyqtSlot()
+    @pyqtSlot()
     def on_mBtnMoveToAvailable_clicked(self):
         self.mOuput.addItem(self.mInput.takeItem(self.mInput.currentRow()))
 
-    @QtCore.pyqtSlot()
+    @pyqtSlot()
     def on_mBtnMoveToSelected_clicked(self):
         self.mInput.addItem(self.mOuput.takeItem(self.mOuput.currentRow()))
 
-    @QtCore.pyqtSlot()
+    @pyqtSlot()
     def on_mButtonToAvailable_clicked(self):
         while self.mOuput.count() > 0:
             self.mInput.addItem(self.mOuput.takeItem(0))
 
-    @QtCore.pyqtSlot()
+    @pyqtSlot()
     def on_mButtonToSelected_clicked(self):
         while self.mInput.count() > 0:
             self.mOuput.addItem(self.mInput.takeItem(0))
 
-    @QtCore.pyqtSlot()
+    @pyqtSlot()
     def on_mBtnUp_clicked(self):
         row = self.mOuput.currentRow()
         currentItem = self.mOuput.takeItem(row)
         self.mOuput.insertItem(row - 1, currentItem)
         self.mOuput.setCurrentRow(row - 1)
 
-    @QtCore.pyqtSlot()
+    @pyqtSlot()
     def on_mBtnDown_clicked(self):
         row = self.mOuput.currentRow()
         currentItem = self.mOuput.takeItem(row)
@@ -455,3 +429,18 @@ class TwoListSelection(qt.QWidget):
     def clean_list(self):
         self.mInput.clear()
         self.mOuput.clear()
+
+
+###############################################################################################
+# MAIN
+if __name__ == '__main__':
+
+    app = QCoreApplication.instance()
+    if app is None:
+        app = qt.QApplication([])
+    csv_file = "/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images/global-merge.csv"
+    df = read_csv(csv_file, index_col=None, header=[0], squeeze=True, sep="\t")
+    ddict = df.to_dict(orient='list')
+    foo = TableWidget(ddict, path_images="/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/cut_images/")
+    foo.showMaximized()
+    app.exec_()
