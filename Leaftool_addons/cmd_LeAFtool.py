@@ -15,30 +15,23 @@ import PyIPSDK.IPSDKIPLIntensityTransform as itrans
 
 import xml.etree.ElementTree as xmlet
 import cv2
-
 from pathlib import Path
-import os
-import re
+from re import compile
 import numpy as np
 import pandas as pd
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 from pprint import pprint as pp
 import logging
 import logging.config
-import sys
-import time
+from sys import path as syspath
 import yaml
 import colorlog
-import argparse
-import threading
+import click
 
 # sys.tracebacklimit = 1
 # auto add Explorer in PYTHONPATH
-for path in sys.path:
-    if "/bin/Release_linux_x64" in path:
-        explorer_path = Path(path.split('/bin/Release_linux_x64')[0]).joinpath("Explorer/Interface").as_posix()
-        break
-sys.path.insert(0, explorer_path)
+explorer_path = Path(PyIPSDK.getPyIPSDKDir()).parent.parent.joinpath("Explorer", "Interface")
+syspath.insert(0, explorer_path.as_posix())
 
 import DatabaseFunction as Dfct
 import UsefullFunctions as fct
@@ -695,16 +688,18 @@ class AnalysisImages:
         """analyze the inputs and outputs to build the list of images already analyzed"""
 
         def glob_re(pattern, strings):
-            return filter(re.compile(pattern).match, strings)
+            return filter(compile(pattern).match, strings)
 
         # glob scan file to analysis
-        full_files_filter = glob_re(r'^(.(?!(_overlay)))*.tif$', os.listdir(self.basedir.as_posix()))
+        # full_files_filter = glob_re(r'^(.(?!(_overlay)))*.tif$', os.listdir(self.basedir.as_posix()))
+        full_files_filter = glob_re(r'^(.(?!(_overlay)))*.tif$', [path.as_posix() for path in self.basedir.glob("*.tif")])
         self.full_files = sorted([self.basedir.joinpath(path) for path in full_files_filter])
         full_files_set = set(sorted(f"{path.stem}" for path in self.full_files))
         # pp(f"full_files_filter: {list(full_files_filter)}")
         # pp(f"full_files: {self.full_files}")
         # if force_rerun load already file run
-        mask_overlay_files_filter = glob_re(r'.*_mask_overlay\.tif$', os.listdir(self.basedir.as_posix()))
+        # mask_overlay_files_filter = glob_re(r'.*_mask_overlay\.tif$', os.listdir(self.basedir.as_posix()))
+        mask_overlay_files_filter = glob_re(r'.*_mask_overlay\.tif$', [path.as_posix() for path in self.basedir.glob("*.tif")])
         self.mask_overlay_files = sorted([self.basedir.joinpath(path) for path in mask_overlay_files_filter])
         mask_overlay_files_filter_set = set(
             sorted(f"{path.stem.replace('_mask_overlay', '')}" for path in self.mask_overlay_files))
@@ -1607,10 +1602,8 @@ class LeAFtool:
 
 
 #####################################################
-# CODE RUN
+# Generic code
 #####################################################
-version = "0.0.1"
-
 
 def sort_human(in_list, _nsre=None):
     """
@@ -1635,11 +1628,11 @@ def sort_human(in_list, _nsre=None):
 
     """
     from warnings import warn
-    import re
+    from re import compile, split
     if not _nsre:
-        _nsre = re.compile('([0-9]+)')
+        _nsre = compile('([0-9]+)')
     try:
-        return [int(text) if text.isdigit() else f"{text}".lower() for text in re.split(_nsre, in_list)]
+        return [int(text) if text.isdigit() else f"{text}".lower() for text in split(_nsre, in_list)]
     except TypeError:
         if not isinstance(in_list, int):
             warn(
@@ -1672,18 +1665,6 @@ def compare_list(list1, list2):
         print(ens1 & ens3) set([6]), même raison que deux lignes au dessus\n
         print(ens1 ^ ens3) set([1, 2, 3, 4, 5, 7, 8, 9]), l'union moins les éléments communs\n
         print(ens1 - ens2) set([1, 5, 6]), on enlève les éléments de ens2
-
-    Examples:
-        >>> l1 = [1, 2, 3, 4, 5, 6]
-        >>> l2 = [6, 7, 8, 9]
-        >>> com, u1, u2 = compare_list(l1, l2)
-        >>> print(com)
-        [6]
-        >>> print(u1)
-        [1, 2, 3, 4, 5]
-        >>> print(u2)
-        [7, 8, 9]
-
     """
     list1 = [Path(elm).name for elm in list1]
     list2 = [Path(elm).name.replace('_mask_overlay', "") for elm in list2]
@@ -1695,116 +1676,9 @@ def compare_list(list1, list2):
     return sorted(common, key=sort_human), sorted(uniq1, key=sort_human), sorted(uniq2, key=sort_human)
 
 
-def existent_file(path):
-    """
-    'Type' for argparse - checks that file exists and return the absolute path as PosixPath() with pathlib
-
-    Notes:
-        function need modules:
-
-        - pathlib
-        - argparse
 
 
-    Arguments:
-        path (str): a path to existent file
 
-    Returns:
-        :class:`PosixPath`: ``Path(path).resolve()``
-
-    Raises:
-         ArgumentTypeError: If file `path` does not exist.
-         ArgumentTypeError: If `path` is not a valid file.
-
-    Examples:
-        import argparse
-        parser = argparse.ArgumentParser(prog='test.py', description='''This is demo''')
-        parser.add_argument('-f', '--file', metavar="<path/to/file>",type=existent_file, required=True,
-                            dest='path_file', help='path to file')
-
-    """
-    from argparse import ArgumentTypeError
-    from pathlib import Path
-
-    if not Path(path).exists():
-        # Argparse uses the ArgumentTypeError to give a rejection message like:
-        # error: argument input: x does not exist
-        raise ArgumentTypeError(f'ERROR: file "{path}" does not exist')
-    elif not Path(path).is_file():
-        raise ArgumentTypeError(f'ERROR: "{path}" is not a valid file')
-
-    return Path(path).resolve()
-
-
-def welcome_args(version_arg, parser_arg):
-    """
-    use this Decorator to add information to scripts with arguments
-
-    Args:
-        version_arg: the program version
-        parser_arg: the function which return :class:`argparse.ArgumentParser`
-
-    Returns:
-        None:
-
-    Notes:
-        use at main() decorator for script with :class:`argparse.ArgumentParser`
-
-    Examples:
-        @welcome_args(version, build_parser())
-        def main():
-            # some code
-        main()
-        ################################################################################
-        #                             prog_name and version                            #
-        ################################################################################
-        Start time: 16-09-2020 at 14:39:02
-        Commande line run: ./filter_mummer.py -l mummer/GUY0011.pp1.fasta.PH0014.pp1.fasta.mum
-        - Intput Info:
-                - debug: False
-                - plot: False
-                - scaff_min: 1000000
-                - fragments_min: 5000
-                - csv_file: blabla
-        PROGRAMME CODE HERE
-        Stop time: 16-09-2020 at 14:39:02       Run time: 0:00:00.139732
-        ################################################################################
-        #                               End of execution                               #
-        ################################################################################
-
-    """
-    from datetime import datetime
-
-    def welcome(func):
-        def wrapper():
-            start_time = datetime.now()
-            parser = parser_arg
-            version = version_arg
-            parse_args = parser.parse_args()
-            # Welcome message
-            print(
-                f"""{"#" * 80}\n#{Path(parser.prog).stem + " " + version:^78}#\n{"#" * 80}\nStart time: 
-{start_time:%d-%m-%Y at %H:%M:%S}\nCommande line run: {" ".join(sys.argv)}\n""")
-            # resume to user
-            print(" - Intput Info:")
-            for k, v in vars(parse_args).items():
-                print(f"\t - {k}: {v}")
-            func()
-            print(
-                f"""\nStop time: {datetime.now():%d-%m-%Y at %H:%M:%S}\tRun time: {datetime.now() - start_time}\n
-{"#" * 80}\n#{'End of execution':^78}#\n{"#" * 80}""")
-
-        return wrapper
-
-    return welcome
-
-
-def build_parser():
-    epilog_tools = """Documentation avail at: \n\n"""
-    description_tools = f"""
-    More information:
-        Script version: {version}
-    """
     parser_mandatory = argparse.ArgumentParser(add_help=False)
 
     mandatory = parser_mandatory.add_argument_group('Input mandatory infos for running')
@@ -1819,17 +1693,87 @@ def build_parser():
         epilog=epilog_tools
     )
 
-    optional = parser_other.add_argument_group('Input infos not mandatory')
-    optional.add_argument('-v', '--version', action='version', version=version,
-                          help=f'Use if you want to know which version of {Path(__file__).name} you are using')
-    optional.add_argument('-h', '--help', action='help', help=f'show this help message and exit')
-    optional.add_argument('-d', '--debug', action='store_true', help='enter verbose/debug mode')
-    return parser_other
+
+def get_last_version(url, current_version):
+    """Function for know the last version of Git repo in website"""
+    try:
+        from urllib.request import urlopen
+        from re import search
+        import click
+        module_mane = url.split('/')[-1]
+        HTML = urlopen(f"{url}/tags").read().decode('utf-8')
+        str_search = f"{url.replace('https://github.com', '')}/releases/tag/.*"
+        try:
+            lastRelease = search(str_search, HTML).group(0).split("/")[-1].split('"')[0]
+        except Exception as e:
+            lastRelease = "There aren’t any releases"
+        epilogTools = "\n"
+        if str(current_version) != lastRelease:
+            if lastRelease < str(current_version):
+                epilogTools = click.style(f"\n    ** NOTE: This {module_mane} version ({current_version}) is higher than the production version ({lastRelease}), you are using a dev version\n\n", fg="yellow", bold=True)
+            elif lastRelease > str(current_version) and lastRelease != "There aren’t any releases":
+                epilogTools = click.style(f"\n    ** NOTE: The Latest version of {module_mane} {lastRelease} is available at {url}/releases\n\n",fg="yellow", underline=True)
+            elif lastRelease == "There aren’t any releases":
+                epilogTools = click.style(f"\n    ** NOTE: There aren’t any releases at the moment\n\n", fg="red", underline=False)
+            else:
+                epilogTools = click.style(f"\n    ** NOTE: Can't check if new release are available\n\n", fg="red", underline=False)
+
+        return epilogTools
+    except Exception as e:
+        epilogTools = click.style(f"\n    ** ENABLE TO GET LAST VERSION, check internet connection\n{e}\n\n", fg="red")
+        return epilogTools
 
 
-@welcome_args(version, build_parser())
-def main():
-    prog_args = build_parser().parse_args()
+#####################################################
+# MAIN
+#####################################################
+DOCS = "https://github.com/sravel/LeAFtool/blob/main/README.rst"
+GIT_URL = "https://github.com/sravel/LeAFtool"
+__version__ = "0.0.1"
+description_tools = f"""
+    Welcome to LeAFtool version: {__version__}! Created on September 2021
+    @author: Sebastien Ravel (CIRAD)
+    @email: sebastien.ravel@cirad.fr
+
+    #             .=:                                                                                       
+    #          :--%@*:                                                                                      
+    #        ::=-#@**#.                                                                                     
+    #       -+-:*@**+=.                                                                                     
+    #      -=-:+@+=*=+.            :=              .....:.                                        -=. 
+    #     :--:-@#-=*##.           -@@%         =#@%*******-         **                           .@%: 
+    #    -=--:%%+=**#+           :@- %#         #@.                -@-                           *@   
+    #   .=:::*@+#++==           .@+   @*       :@-                 @*                            @#   
+    #    -=:-@*=+:==  .:        %%    .@+      #@  ..:-=+.       =*@*+++.   .=+-       .=+-     :@=   
+    #     ::#@+#+=- :%#*%+     +@      :@-     @%*#***+=-        =@*---+.  *%*+#@=   .##*+#@-   -@-   
+    #      .@*::.  .@*  %@ .:-=@%=++++==@@.   :@:                =@       %%    *@   %#    #@   :@-   
+    #      -@=     =@=+#*  -+=@@---::--==@#   *@.                @*       @+   .@#  .@=   :@*   -@-   
+    #      .@@*++*##%@*.      @*         =@-  @@:               :@-       -%*+*%*    =%*+*%+    -@+   
+    #        =++=-.  =**##*   =:          *+  -%:               .*-         ---        ---       -- 
+
+    Please cite our github: {GIT_URL}
+    Licencied under CeCill-C (http://www.cecill.info/licences/Licence_CeCILL-C_V1-en.html)
+    and GPLv3 Intellectual property belongs to CIRAD and authors.
+    Documentation avail at: {DOCS}
+    {get_last_version(url=GIT_URL, current_version=__version__)}"""
+
+
+@click.command("cmd_LeAFtool", short_help=click.secho(description_tools, fg='green', nl=False),
+               context_settings={'help_option_names': ('-h', '--help'), "max_content_width": 800}, no_args_is_help=True)
+@click.option('--config', '-c',
+              type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, resolve_path=True),
+              required=True, show_default=False, help='path to config file YAML')
+@click.option('--debug', '-d', is_flag=True, required=False, default=False, show_default=True,
+              help='enter verbose/debug mode')
+@click.version_option(__version__, '--version', '-v')
+@click.argument('other', nargs=-1, type=click.UNPROCESSED)
+def main(config, debug, other):
+    """
+    \b
+    Run image scan analysis with paramters load on config file YAML
+
+    Example:
+        cmd_LeAFtool.py -c config.yaml
+    """
     #####################################################
     # EDIT ONLY THIS LINE TO CHANGE CONFIG FILE
     # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/test-henri/config-henri.yaml"
@@ -1837,8 +1781,7 @@ def main():
     # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/bug_francoise/config.yaml"
     # config_file_name = "/home/sebastien/Documents/IPSDK/IMAGE/bug_marie/config.yaml"
     #####################################################
-
-    LeAFtool(config_file=prog_args.config_file, debug=prog_args.debug)
+    LeAFtool(config_file=config, debug=debug)
 
 
 if __name__ == '__main__':
