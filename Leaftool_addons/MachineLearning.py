@@ -1,10 +1,9 @@
 import os
-from PyQt5.QtCore import Qt
-from PyQt5 import QtGui
 import PyQt5.QtWidgets as qt
-import UsefullVariables as vrb
+from PyQt5.QtCore import Qt, QCoreApplication
+
 from Leaftool_addons.commonWidget import style, FileSelectorLeaftool, NumberLineEditLabel, allow_ext
-import UsefullWidgets as wgt
+import UsefullVariables as vrb
 import DatabaseFunction as Dfct
 import xml.etree.ElementTree as xmlet
 
@@ -116,6 +115,7 @@ class Calibration(qt.QGroupBox):
 
     def __init__(self):
         super().__init__()
+        self.comboBoxCalibration = None
         self.calibrationsElement = None
         self.calibration_avail = []
         self.loading = False
@@ -157,6 +157,7 @@ class MachineLearningParams(qt.QGroupBox):
 
     def __init__(self, parent):
         super().__init__()
+        self.calibrationsElement = None
         self.parent = parent
         self.loading = True
         self.avail_models = []
@@ -230,7 +231,7 @@ class MachineLearningParams(qt.QGroupBox):
         self.ml_params.draw_ML_image.stateChanged.connect(self.update_ml_params)
         self.ml_params.split_ML.stateChanged.connect(self.update_ml_params)
         self.ml_params.color_lesion_individual.stateChanged.connect(self.update_ml_params)
-        #Merge
+        # Merge
         self.merge_params.images_ext.currentIndexChanged.connect(self.update_ml_params)
         self.merge_params.rm_original.stateChanged.connect(self.update_ml_params)
 
@@ -341,7 +342,6 @@ class MachineLearningParams(qt.QGroupBox):
             self.parent.logger.error(f"ERROR: Key {e} is not found on file")
             self.parent.dict_for_yaml = self.parent.dict_backup
 
-
     def show_ml_merge_params(self):
         if self.parent.layer_tools.ml_checkbox.isChecked() or self.parent.layer_tools.merge_checkbox.isChecked():
             self.setVisible(True)
@@ -351,23 +351,12 @@ class MachineLearningParams(qt.QGroupBox):
             self.setVisible(False)
 
 
+###############################################################################################
+# MAIN
 if __name__ == '__main__':
-    from PyQt5.QtCore import Qt, QCoreApplication
-    import sys
-
     app = QCoreApplication.instance()
     if app is None:
         app = qt.QApplication([])
-
-    sys._excepthook = sys.excepthook
-
-    def exception_hook(exctype, value, traceback):
-        print(exctype, value, traceback)
-        sys._excepthook(exctype, value, traceback)
-        sys.exit(1)
-
-
-    sys.excepthook = exception_hook
 
     # foo = MachineLearningParams(parent=None)
     foo = MLParams()
