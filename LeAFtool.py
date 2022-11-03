@@ -2,6 +2,9 @@ import logging.config
 from sys import path as syspath
 import subprocess
 from pathlib import Path
+import yaml
+import pandas as pd
+from collections import OrderedDict
 from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot, QObject, pyqtSignal
 from PyQt5.QtGui import QIcon, QPixmap, QColor
 from PyQt5.Qsci import QsciScintilla, QsciLexerYAML
@@ -27,7 +30,7 @@ syspath.insert(0, Path(vrb.folderMacroInterface + "/LeAFtool/").as_posix())
 from Leaftool_addons.DrawCut import DrawCutParams
 from Leaftool_addons.MachineLearning import MachineLearningParams
 from Leaftool_addons.commonWidget import style, scroll_style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool, Documentator
-from Leaftool_addons.cmd_LeAFtool import *
+# from Leaftool_addons.cmd_LeAFtool import LeAFtool
 
 # configure logger
 logging.config.dictConfig({
@@ -275,16 +278,18 @@ class ToolsActivation(qt.QGroupBox):
             self.parent.dict_for_yaml["rename"] = self.list_selection.get_right_elements()
             self.parent.preview_config.setText(self.parent.export_use_yaml)
 
-            # if all disable, disable run
-            if not self.parent.layer_tools.draw_checkbox.isChecked() \
-                    and not self.parent.layer_tools.cut_checkbox.isChecked() \
-                    and not self.parent.layer_tools.ml_checkbox.isChecked() \
-                    and not self.parent.layer_tools.merge_checkbox.isChecked():
-                self.parent.layer_leaftool_params.run.setDisabled(True)
-                self.parent.layer_leaftool_params.save.setDisabled(True)
-            else:
-                self.parent.layer_leaftool_params.run.setDisabled(False)
-                self.parent.layer_leaftool_params.save.setDisabled(False)
+    def disable_running_bottom(self):
+        # if all disable, disable run
+
+        if (not self.parent.layer_tools.draw_checkbox.isChecked() \
+                and not self.parent.layer_tools.cut_checkbox.isChecked() \
+                and not self.parent.layer_tools.ml_checkbox.isChecked() \
+                and not self.parent.layer_tools.merge_checkbox.isChecked()) or self.parent.warning_found:
+            self.parent.layer_leaftool_params.run.setDisabled(True)
+            self.parent.layer_leaftool_params.save.setDisabled(True)
+        else:
+            self.parent.layer_leaftool_params.run.setDisabled(False)
+            self.parent.layer_leaftool_params.save.setDisabled(False)
                 # self.csv_file.setVisible(self.parent.layer_tools.draw_checkbox.isChecked())
                 # self.csv_file.setVisible(self.parent.layer_tools.cut_checkbox.isChecked())
                 # self.csv_file.setVisible(self.parent.layer_tools.ml_checkbox.isChecked())
@@ -418,6 +423,7 @@ class RunLeAFtool(qt.QWidget):
         self.leaftool = None
         self.connect = None
         self.running_process = None
+        self.warning_found = False
 
         # Layout Style
         self.layout = qt.QGridLayout()
@@ -472,7 +478,7 @@ class RunLeAFtool(qt.QWidget):
         self.load_yaml()
         # self.setAutoFillBackground(True)
 
-        ## Layer leaftool params connection
+        # Layer leaftool params connection
         self.layer_leaftool_params.upload.clicked.connect(self.upload_yaml)
         self.layer_leaftool_params.save.clicked.connect(self.save_yaml)
         self.layer_leaftool_params.run.clicked.connect(self.change_run_state)
@@ -518,6 +524,7 @@ class RunLeAFtool(qt.QWidget):
             self.logger.info("kill Thread success")
 
     def load_yaml(self):
+        self.process.clear()
         with open(self.yaml_path, "r") as file_config:
             self.dict_for_yaml = yaml.load(file_config, Loader=yaml.Loader)
         with open(self.default_yaml_path, "r") as file_config:
@@ -530,15 +537,29 @@ class RunLeAFtool(qt.QWidget):
 
     @pyqtSlot("QWidget*", "QWidget*")
     def on_focus_changed(self, old, now):
+        self.get_warning()
         self.update_all()
+        self.get_warning()
+        self.layer_tools.disable_running_bottom()
+        # pass
+
+    def get_warning(self):
+        """Get warning on txt"""
+
+        txt = self.process.widget.toPlainText()
+        if "warning" in txt.lower():
+            self.warning_found = True
+        else:
+            self.warning_found = False
+            self.process.clear()
 
     def update_all(self):
-
         self.layer_tools.update_activation_tools()
         self.layer_draw_cut.update_draw_cut_params()
         self.layer_ml_merge.update_ml_params()
         self.layer_leaftool_params.update_debug()
         self.preview_config.setText(self.export_use_yaml)
+        self.dict_backup = self.dict_for_yaml.copy()
 
     def upload_all(self):
         self.layer_tools.upload_activation_tools()
@@ -615,6 +636,18 @@ class RunLeAFtool(qt.QWidget):
             return True
         else:
             return False
+
+    def check_path(self, from_object, keys_list):
+        path_str = from_object.text()
+        print(f"**{path_str}**")
+        if path_str:
+            if Path(path_str).exists():
+                from_object.setStyleSheet("background-color: #606060;")
+            else:
+                self.logger.warning(f"Warning: arguments {keys_list}: '{path_str}' doesn't exist")
+                from_object.setStyleSheet("background-color: darkRed;")
+        elif path_str == "":
+            from_object.setStyleSheet("background-color: #606060;")
 
 
 class MainInterface(qt.QMainWindow):
@@ -727,24 +760,25 @@ class MainInterface(qt.QMainWindow):
             self.table_final.clear()
 
 
-def seeSplashScreen():
+def openWidget():
+    app = QCoreApplication.instance()
+    name = app.applicationName()
+    app.setObjectName("LeAFtool")
+    app.setApplicationName("LeAFtool")
+    app.setApplicationDisplayName("LeAFtool")
+    # SplashScreen
     pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
     pixmap = pixmap.scaled(600, 600, aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
     splashScreen = qt.QSplashScreen(pixmap)
     splashScreen.setFixedSize(600, 600)
     splashScreen.show()
-    return splashScreen
-
-
-def openWidget():
-    main_interface = None
-    if not main_interface:
-        splashScreen = seeSplashScreen()
-        main_interface = MainInterface()
-        main_interface.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
-        splashScreen.finish(main_interface)
+    # Load App interface
+    main_interface = MainInterface()
+    main_interface.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
+    splashScreen.finish(main_interface)
     main_interface.show()
-    # fct.showWidget(main_interface)
+    if name == "LeAFtool.py":
+        app.exec()
 
 
 ###############################################################################################
@@ -762,23 +796,25 @@ if mainWindow:
 ###############################################################################################
 # MAIN
 if __name__ == '__main__':
-    app = QCoreApplication.instance()
-    if app is None:
-        app = qt.QApplication([])
 
-    splashScreen = seeSplashScreen()
-    app.processEvents()
-    app.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
-
-    qt.QApplication.setStyle(qt.QStyleFactory.create('Fusion'))  # <- Choose the style
-    main_interface = MainInterface()
-
-    # main_interface = FileSelectorLeaftool("test")
-    # main_interface = DataExplorer()
-    # main_interface = ToolsActivation(parent=RunLeAFtool)
-    # main_interface = RunLeAFtool()
-    # main_interface = NumberLineEditLabel(constraint="Natural", text="0", label="Y pieces:")
-    # main_interface.showFullScreen()
-    splashScreen.finish(main_interface)
-    main_interface.show()
-    app.exec_()
+    openWidget()
+    # app = QCoreApplication.instance()
+    # if app is None:
+    #     app = qt.QApplication([])
+    #
+    # splashScreen = seeSplashScreen()
+    # app.processEvents()
+    # app.setWindowIcon(QIcon(vrb.folderMacroInterface + "/LeAFtool/Images/favicon.png"))
+    #
+    # qt.QApplication.setStyle(qt.QStyleFactory.create('Fusion'))  # <- Choose the style
+    # main_interface = MainInterface()
+    #
+    # # main_interface = FileSelectorLeaftool("test")
+    # # main_interface = DataExplorer()
+    # # main_interface = ToolsActivation(parent=RunLeAFtool)
+    # # main_interface = RunLeAFtool()
+    # # main_interface = NumberLineEditLabel(constraint="Natural", text="0", label="Y pieces:")
+    # # main_interface.showFullScreen()
+    # splashScreen.finish(main_interface)
+    # main_interface.show()
+    # app.exec_()
