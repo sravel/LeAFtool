@@ -1,8 +1,10 @@
+from functools import partial
 import PyQt5.QtWidgets as qt
 import UsefullVariables as vrb
 from PyQt5.QtCore import Qt, QCoreApplication
+from PyQt5 import QtGui
 
-from Leaftool_addons.commonWidget import NumberLineEditLabel, FileSelectorLeaftool, style, get_files_ext, allow_ext
+from Leaftool_addons.commonWidget import NumberLineEditLabel, FileSelectorLeaftool, SpinBoxLabel, style, get_files_ext, allow_ext, int_validator
 
 
 class DrawCutMargin(qt.QGroupBox):
@@ -19,9 +21,13 @@ class DrawCutMargin(qt.QGroupBox):
 
         # Widgets
         self.left = NumberLineEditLabel(constraint="Natural", text="0", label="Left:")
+        self.left.lineEdit.setValidator(int_validator)
         self.top = NumberLineEditLabel(constraint="Natural", text="0", label="Top:")
+        self.top.lineEdit.setValidator(int_validator)
         self.right = NumberLineEditLabel(constraint="Natural", text="0", label="Right:")
+        self.right.lineEdit.setValidator(int_validator)
         self.bottom = NumberLineEditLabel(constraint="Natural", text="0", label="Bottom:")
+        self.bottom.lineEdit.setValidator(int_validator)
 
         # Position widgets
         self.layout.addWidget(self.left, 0, 0)
@@ -43,8 +49,8 @@ class DrawCutPart(qt.QGroupBox):
         self.setLayout(self.layout)
 
         # Widgets
-        self.x_pieces = NumberLineEditLabel(constraint="Natural", text="0", label="X parts:")
-        self.y_pieces = NumberLineEditLabel(constraint="Natural", text="0", label="Y parts:")
+        self.x_pieces = SpinBoxLabel(min_v=1, max_v=10, step=1, value=1, label="X parts:")
+        self.y_pieces = SpinBoxLabel(min_v=1, max_v=10, step=1, value=1, label="Y parts:")
 
         # Position widgets
         self.layout.addWidget(self.x_pieces, 0, 0)
@@ -153,13 +159,14 @@ class DrawCutParams(qt.QGroupBox):
         not_resize.setRetainSizeWhenHidden(True)
         self.numbering.setSizePolicy(not_resize)
 
-        # Connection
-        self.images_path.lineEditFile.editingFinished.connect(self.update_draw_cut_params)
+        # Connection , keys_list
+        self.images_path.lineEditFile.textChanged.connect(partial(self.parent.check_path, from_object=self.images_path.lineEditFile, keys_list="'DRAW-CUT' 'images_path'"))
         self.images_path.lineEditFile.editingFinished.connect(self.update_ext)
-        self.out_cut_dir.lineEditFile.editingFinished.connect(self.update_draw_cut_params)
-        self.out_draw_dir.lineEditFile.editingFinished.connect(self.update_draw_cut_params)
-        self.cut_part.x_pieces.lineEdit.editingFinished.connect(self.update_draw_cut_params)
-        self.cut_part.y_pieces.lineEdit.editingFinished.connect(self.update_draw_cut_params)
+        self.out_cut_dir.lineEditFile.textChanged.connect(partial(self.parent.check_path, from_object=self.out_cut_dir.lineEditFile, keys_list="'DRAW-CUT' 'out_draw_dir'"))
+        self.out_draw_dir.lineEditFile.textChanged.connect(partial(self.parent.check_path, from_object=self.out_draw_dir.lineEditFile, keys_list="'DRAW-CUT' 'out_cut_dir'"))
+
+        self.cut_part.x_pieces.lineEdit.valueChanged.connect(self.update_draw_cut_params)
+        self.cut_part.y_pieces.lineEdit.valueChanged.connect(self.update_draw_cut_params)
         self.margin.left.lineEdit.editingFinished.connect(self.update_draw_cut_params)
         self.margin.top.lineEdit.editingFinished.connect(self.update_draw_cut_params)
         self.margin.right.lineEdit.editingFinished.connect(self.update_draw_cut_params)
@@ -181,8 +188,8 @@ class DrawCutParams(qt.QGroupBox):
             if (self.parent.dict_for_yaml["RUNSTEP"]["ML"] or self.parent.dict_for_yaml["RUNSTEP"]["merge"]) and self.out_cut_dir.lineEditFile.text() != "":
                 self.parent.dict_for_yaml["ML"]["images_path"] = self.out_cut_dir.lineEditFile.text()
                 self.parent.layer_ml_merge.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["out_cut_dir"])
-            self.parent.dict_for_yaml["DRAW-CUT"]["x_pieces"] = int(self.cut_part.x_pieces.lineEdit.text())
-            self.parent.dict_for_yaml["DRAW-CUT"]["y_pieces"] = int(self.cut_part.y_pieces.lineEdit.text())
+            self.parent.dict_for_yaml["DRAW-CUT"]["x_pieces"] = int(self.cut_part.x_pieces.lineEdit.value())
+            self.parent.dict_for_yaml["DRAW-CUT"]["y_pieces"] = int(self.cut_part.y_pieces.lineEdit.value())
             self.parent.dict_for_yaml["DRAW-CUT"]["left"] = int(self.margin.left.lineEdit.text())
             self.parent.dict_for_yaml["DRAW-CUT"]["top"] = int(self.margin.top.lineEdit.text())
             self.parent.dict_for_yaml["DRAW-CUT"]["right"] = int(self.margin.right.lineEdit.text())
@@ -197,23 +204,24 @@ class DrawCutParams(qt.QGroupBox):
         #     pass
 
     def upload_draw_cut_params(self):
+        # TODO: Add more control on upload data
         try:
             self.loading = True
-            if self.parent.dict_for_yaml["RUNSTEP"]["draw"] or self.parent.dict_for_yaml["RUNSTEP"]["cut"]:
-                self.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["images_path"])
-                self.out_draw_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["out_draw_dir"])
-                self.out_cut_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["out_cut_dir"])
-                self.cut_part.x_pieces.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["x_pieces"]))
-                self.cut_part.y_pieces.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["y_pieces"]))
-                self.margin.left.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["left"]))
-                self.margin.top.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["top"]))
-                self.margin.right.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["right"]))
-                self.margin.bottom.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["bottom"]))
-                self.noise_remove.setChecked(bool(self.parent.dict_for_yaml["DRAW-CUT"]["noise_remove"]))
-                self.force_rerun.setChecked(bool(self.parent.dict_for_yaml["DRAW-CUT"]["force_rerun"]))
-                self.images_ext.addItem(self.parent.dict_for_yaml["DRAW-CUT"]["extension"])
-                self.images_ext.setCurrentText(self.parent.dict_for_yaml["DRAW-CUT"]["extension"])
-                self.update_ext()
+            # if self.parent.dict_for_yaml["RUNSTEP"]["draw"] or self.parent.dict_for_yaml["RUNSTEP"]["cut"]:
+            self.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["images_path"])
+            self.out_draw_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["out_draw_dir"])
+            self.out_cut_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["out_cut_dir"])
+            self.cut_part.x_pieces.lineEdit.setValue(int(self.parent.dict_for_yaml["DRAW-CUT"]["x_pieces"]))
+            self.cut_part.y_pieces.lineEdit.setValue(int(self.parent.dict_for_yaml["DRAW-CUT"]["y_pieces"]))
+            self.margin.left.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["left"]))
+            self.margin.top.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["top"]))
+            self.margin.right.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["right"]))
+            self.margin.bottom.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["bottom"]))
+            self.noise_remove.setChecked(bool(self.parent.dict_for_yaml["DRAW-CUT"]["noise_remove"]))
+            self.force_rerun.setChecked(bool(self.parent.dict_for_yaml["DRAW-CUT"]["force_rerun"]))
+            self.images_ext.addItem(self.parent.dict_for_yaml["DRAW-CUT"]["extension"])
+            self.images_ext.setCurrentText(self.parent.dict_for_yaml["DRAW-CUT"]["extension"])
+            self.update_ext()
             self.show_draw_params()
             self.loading = False
         except KeyError as e:

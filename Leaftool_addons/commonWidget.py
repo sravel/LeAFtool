@@ -1,5 +1,5 @@
 from sys import path as syspath
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QIntValidator, QDoubleValidator
 from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
 import PyQt5.QtWidgets as qt
 
@@ -17,8 +17,21 @@ import UsefullFunctions as fct
 import DatabaseFunction as Dfct
 
 
-style = 'QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(33, 171, ' \
-        '38)} QGroupBox {font: bold; border: 1px solid gray; margin-top:12 px; margin-bottom: 0px}'
+style = """QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(33, 171, 38)} 
+QGroupBox {font: bold; border: 1px solid gray; margin-top:12 px; margin-bottom: 0px}
+QDoubleSpinBox:focus {
+border-color: green;
+}
+QDoubleSpinBox {
+    background-color: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4d4d4d, stop: 0 #646464, stop: 1 #5d5d5d);
+}
+QSpinBox:focus {
+border-color: green;
+}
+QSpinBox {
+    background-color: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4d4d4d, stop: 0 #646464, stop: 1 #5d5d5d);
+}
+"""
 allow_ext = ["tif", "tiff", "TIF", "TIFF", "Tif", "Tiff", "im6", "IM6", "jpg", "JPG", "PNG", "png", "BMP", "bmp"]
 
 scroll_style = """QScrollBar:horizontal {
@@ -34,6 +47,8 @@ QScrollBar:vertical
       margin: 16px 0 16px 0;
       border: 1px solid #222222;
 }"""
+
+int_validator = QIntValidator(0, 9999)  # Create validator.
 
 
 def return_default_folder():
@@ -110,6 +125,7 @@ class FileSelectorLeaftool(qt.QGroupBox):
         self.labelFile.setMinimumWidth(int(83 * vrb.ratio))
         self.lineEditFile = qt.QLineEdit()
         self.lineEditFile.setFixedHeight(int(25 * vrb.ratio))
+        self.lineEditFile.setReadOnly(True)
 
         if file:
             self.buttonOpen = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/table.png")
@@ -171,6 +187,34 @@ class NumberLineEditLabel(qt.QGroupBox):
         self.lineEdit.setMaximumWidth(int(60 * vrb.ratio))
         self.lineEdit.setFixedHeight(int(25 * vrb.ratio))
         self.lineEdit.setMaxLength(5)
+        self.label_lineEdit = qt.QLabel(label)
+        self.label_lineEdit.setFixedWidth(int(size * vrb.ratio))
+        self.label_lineEdit.setFixedHeight(int(25 * vrb.ratio))
+
+        self.layout.addWidget(self.label_lineEdit, 0, 0)
+        self.layout.addWidget(self.lineEdit, 0, 1, Qt.AlignLeft)
+
+        # self.setMinimumSize(int(110 * vrb.ratio), int(35 * vrb.ratio))
+        self.setLayout(self.layout)
+        # self.layout.setContentsMargins(2, 2, 2, 2)
+        self.setStyleSheet('QGroupBox {font: bold; border: 0px ; margin-top: 0 px}')
+
+
+class SpinBoxLabel(qt.QGroupBox):
+    def __init__(self, min_v, max_v, step, value, label, size=65):
+        super().__init__()
+        self.layout = qt.QGridLayout()
+
+        if isinstance(value,float):
+            self.lineEdit = qt.QDoubleSpinBox()
+        else:
+            self.lineEdit = qt.QSpinBox()
+        self.lineEdit.setRange(min_v, max_v)
+        self.lineEdit.setSingleStep(step)
+        self.lineEdit.setValue(value)
+        self.lineEdit.setMinimumWidth(int(50 * vrb.ratio))
+        self.lineEdit.setMaximumWidth(int(60 * vrb.ratio))
+        self.lineEdit.setFixedHeight(int(25 * vrb.ratio))
         self.label_lineEdit = qt.QLabel(label)
         self.label_lineEdit.setFixedWidth(int(size * vrb.ratio))
         self.label_lineEdit.setFixedHeight(int(25 * vrb.ratio))

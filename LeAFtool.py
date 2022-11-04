@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot, QObject, pyqtSignal
 from PyQt5.QtGui import QIcon, QPixmap, QColor
 from PyQt5.Qsci import QsciScintilla, QsciLexerYAML
 import PyQt5.QtWidgets as qt
+from functools import partial
 
 import PyIPSDK
 
@@ -228,7 +229,7 @@ class ToolsActivation(qt.QGroupBox):
         self.ml_checkbox.stateChanged.connect(self.update_activation_tools)
         self.merge_checkbox.stateChanged.connect(self.update_activation_tools)
         self.plant_model.currentIndexChanged.connect(self.update_activation_tools)
-        self.csv_file.lineEditFile.textChanged.connect(self.update_activation_tools)
+        self.csv_file.lineEditFile.textChanged.connect(partial(self.parent.check_path, from_object=self.csv_file.lineEditFile, keys_list="'csv_file'"))
         # self.list_selection.mInput.itemSelectionChanged.connect(self.update_activation_tools)
         # self.list_selection.mOuput.itemSelectionChanged.connect(self.update_activation_tools)
         self.list_selection.mBtnMoveToAvailable.clicked.connect(self.update_activation_tools)
@@ -537,7 +538,6 @@ class RunLeAFtool(qt.QWidget):
 
     @pyqtSlot("QWidget*", "QWidget*")
     def on_focus_changed(self, old, now):
-        self.get_warning()
         self.update_all()
         self.get_warning()
         self.layer_tools.disable_running_bottom()
@@ -638,16 +638,24 @@ class RunLeAFtool(qt.QWidget):
             return False
 
     def check_path(self, from_object, keys_list):
+        def clean_warning(keys_list):
+            txt = self.process.widget.toPlainText()
+            if keys_list in txt:
+                txt = "\n".join([elm for elm in txt.split("\n") if keys_list not in elm])
+                self.process.clear()
+                self.logger.warning(txt)
+
         path_str = from_object.text()
-        print(f"**{path_str}**")
         if path_str:
             if Path(path_str).exists():
                 from_object.setStyleSheet("background-color: #606060;")
+                clean_warning(keys_list)
             else:
                 self.logger.warning(f"Warning: arguments {keys_list}: '{path_str}' doesn't exist")
                 from_object.setStyleSheet("background-color: darkRed;")
         elif path_str == "":
             from_object.setStyleSheet("background-color: #606060;")
+            clean_warning(keys_list)
 
 
 class MainInterface(qt.QMainWindow):
