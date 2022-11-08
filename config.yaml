@@ -6,8 +6,8 @@ rename:
 RUNSTEP:
     draw: true
     cut: true
-    ML: true
-    merge: true
+    ML: false
+    merge: false
 DRAW-CUT:
     images_path:
     out_cut_dir:

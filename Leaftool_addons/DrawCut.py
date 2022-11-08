@@ -4,7 +4,7 @@ import UsefullVariables as vrb
 from PyQt5.QtCore import Qt, QCoreApplication
 from PyQt5 import QtGui
 
-from Leaftool_addons.commonWidget import NumberLineEditLabel, FileSelectorLeaftool, SpinBoxLabel, style, get_files_ext, allow_ext, int_validator
+from Leaftool_addons.commonWidget import NumberLineEditLabel, FileSelectorLeaftool, SpinBoxLabel, style, get_files_ext, allow_ext, int_validator, check_values
 
 
 class DrawCutMargin(qt.QGroupBox):
@@ -204,23 +204,49 @@ class DrawCutParams(qt.QGroupBox):
         #     pass
 
     def upload_draw_cut_params(self):
-        # TODO: Add more control on upload data
         try:
             self.loading = True
             # if self.parent.dict_for_yaml["RUNSTEP"]["draw"] or self.parent.dict_for_yaml["RUNSTEP"]["cut"]:
             self.images_path.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["images_path"])
             self.out_draw_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["out_draw_dir"])
             self.out_cut_dir.lineEditFile.setText(self.parent.dict_for_yaml["DRAW-CUT"]["out_cut_dir"])
+
+            # check all integer values
+            message = check_values(dico_params=self.parent.dict_for_yaml,
+                                   primary_key="DRAW-CUT",
+                                   secondary_key_list=["x_pieces", "y_pieces", "left", "top", "right", "bottom"],
+                                   type_value=int,
+                                   default_error=1)
+            if message:
+                self.parent.logger.error(message)
+
             self.cut_part.x_pieces.lineEdit.setValue(int(self.parent.dict_for_yaml["DRAW-CUT"]["x_pieces"]))
             self.cut_part.y_pieces.lineEdit.setValue(int(self.parent.dict_for_yaml["DRAW-CUT"]["y_pieces"]))
             self.margin.left.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["left"]))
             self.margin.top.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["top"]))
             self.margin.right.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["right"]))
             self.margin.bottom.lineEdit.setText(str(self.parent.dict_for_yaml["DRAW-CUT"]["bottom"]))
+
+            # check all boolean values
+            message = check_values(dico_params=self.parent.dict_for_yaml,
+                                   primary_key="DRAW-CUT",
+                                   secondary_key_list=["noise_remove", "force_rerun"],
+                                   type_value=bool,
+                                   default_error=False)
+            if message:
+                self.parent.logger.error(message)
+
             self.noise_remove.setChecked(bool(self.parent.dict_for_yaml["DRAW-CUT"]["noise_remove"]))
             self.force_rerun.setChecked(bool(self.parent.dict_for_yaml["DRAW-CUT"]["force_rerun"]))
+
             self.images_ext.addItem(self.parent.dict_for_yaml["DRAW-CUT"]["extension"])
             self.images_ext.setCurrentText(self.parent.dict_for_yaml["DRAW-CUT"]["extension"])
+            # check numbering is valid value
+            if self.parent.dict_for_yaml["DRAW-CUT"]["numbering"].capitalize() not in ["Right", "Bottom"]:
+                self.parent.logger.error(f"ERROR: 'DRAW-CUT' 'numbering': '{self.parent.dict_for_yaml['DRAW-CUT']['numbering'].capitalize()}' not a valid value, allow only 'Right' or 'Bottom' (not case sensitive), please reload valid file")
+            else:
+                self.numbering.setCurrentText(self.parent.dict_for_yaml["DRAW-CUT"]["numbering"].capitalize())
+
             self.update_ext()
             self.show_draw_params()
             self.loading = False

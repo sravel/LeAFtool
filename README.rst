@@ -228,6 +228,16 @@ Examples
     :alt: Alt text
     :width: 72%
 
+Authors
+=======
+
+* Sébastien RAVEL (CIRAD).
+
+Thanks
+======
+
+
+Thanks to Cécile Triay for this beautiful logo
 
 License
 =======

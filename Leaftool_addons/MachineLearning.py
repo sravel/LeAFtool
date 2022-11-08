@@ -4,7 +4,7 @@ from pathlib import Path
 import PyQt5.QtWidgets as qt
 from PyQt5.QtCore import Qt, QCoreApplication
 
-from Leaftool_addons.commonWidget import style, FileSelectorLeaftool, NumberLineEditLabel, SpinBoxLabel, allow_ext, int_validator
+from Leaftool_addons.commonWidget import style, FileSelectorLeaftool, NumberLineEditLabel, SpinBoxLabel, allow_ext, int_validator, check_values
 import UsefullVariables as vrb
 import DatabaseFunction as Dfct
 import xml.etree.ElementTree as xmlet
@@ -302,7 +302,7 @@ class MachineLearningParams(qt.QGroupBox):
                 self.parent.dict_for_yaml["log_path"] = self.images_path.lineEditFile.text()
                 self.parent.dict_for_yaml["ML"]["calibration_name"] = self.ml_params.comboBoxCalibration.currentText()
                 self.parent.dict_for_yaml["ML"]["small_object"] = int(self.ml_params.small_object.lineEdit.text())
-                self.parent.dict_for_yaml["ML"]["alpha"] = round(self.ml_params.alpha.lineEdit.value(),2)
+                self.parent.dict_for_yaml["ML"]["alpha"] = round(self.ml_params.alpha.lineEdit.value(), 2)
                 self.parent.dict_for_yaml["ML"]["leaf_border"] = int(self.ml_params.leaf_border.lineEdit.text())
                 self.parent.dict_for_yaml["ML"]["noise_remove"] = bool(self.ml_params.noise_remove.isChecked())
                 self.parent.dict_for_yaml["ML"]["force_rerun"] = bool(self.ml_params.force_rerun.isChecked())
@@ -318,7 +318,6 @@ class MachineLearningParams(qt.QGroupBox):
             pass
 
     def upload_ml_params(self):
-        # TODO: Add more control on upload data
         try:
             self.loading = True
             # Check image Path
@@ -358,11 +357,38 @@ class MachineLearningParams(qt.QGroupBox):
             else:
                 self.ml_params.comboBoxCalibration.setCurrentIndex(0)
 
-            # check others
-
+            # check all integer values
+            message = check_values(dico_params=self.parent.dict_for_yaml,
+                                   primary_key="ML",
+                                   secondary_key_list=["small_object", "leaf_border"],
+                                   type_value=int,
+                                   default_error=0)
+            if message:
+                self.parent.logger.error(message)
             self.ml_params.small_object.lineEdit.setText(str(self.parent.dict_for_yaml["ML"]["small_object"]))
-            self.ml_params.alpha.lineEdit.setValue(float(self.parent.dict_for_yaml["ML"]["alpha"]))
             self.ml_params.leaf_border.lineEdit.setText(str(self.parent.dict_for_yaml["ML"]["leaf_border"]))
+
+            # check float value
+            if isinstance(self.parent.dict_for_yaml["ML"]["alpha"], int):
+                if self.parent.dict_for_yaml["ML"]["alpha"] == 0:
+                    self.parent.dict_for_yaml["ML"]["alpha"] = 0.0
+                if self.parent.dict_for_yaml["ML"]["alpha"] != 1:
+                    self.parent.dict_for_yaml["ML"]["alpha"] = 1.0
+            if not isinstance(self.parent.dict_for_yaml["ML"]["alpha"], float):
+                self.parent.logger.error(f"ERROR: 'ML' 'alpha' is not a valid float value, please reload valid file")
+            elif 0 <= float(self.parent.dict_for_yaml["ML"]["alpha"]) <= 1:
+                self.ml_params.alpha.lineEdit.setValue(float(self.parent.dict_for_yaml["ML"]["alpha"]))
+            else:
+                self.parent.logger.error(f"ERROR: 'ML' 'alpha' {float(self.parent.dict_for_yaml['ML']['alpha'])} is not a between 0 <= alpha <= 1, please reload valid file")
+
+            # check all boolean values
+            message = check_values(dico_params=self.parent.dict_for_yaml,
+                                   primary_key="ML",
+                                   secondary_key_list=["split_ML", "noise_remove", "force_rerun", "draw_ML_image", "color_lesion_individual"],
+                                   type_value=bool,
+                                   default_error=False)
+            if message:
+                self.parent.logger.error(message)
             self.ml_params.split_ML.setChecked(bool(self.parent.dict_for_yaml["ML"]["split_ML"]))
             self.ml_params.noise_remove.setChecked(bool(self.parent.dict_for_yaml["ML"]["noise_remove"]))
             self.ml_params.force_rerun.setChecked(bool(self.parent.dict_for_yaml["ML"]["force_rerun"]))
@@ -370,6 +396,13 @@ class MachineLearningParams(qt.QGroupBox):
             self.ml_params.color_lesion_individual.setChecked(bool(self.parent.dict_for_yaml["ML"]["color_lesion_individual"]))
 
             if self.parent.dict_for_yaml["RUNSTEP"]["merge"]:
+                message = check_values(dico_params=self.parent.dict_for_yaml,
+                                       primary_key="MERGE",
+                                       secondary_key_list=["rm_original"],
+                                       type_value=bool,
+                                       default_error=False)
+                if message:
+                    self.parent.logger.error(message)
                 self.merge_params.rm_original.setChecked(bool(self.parent.dict_for_yaml["MERGE"]["rm_original"]))
                 self.merge_params.images_ext.addItem(self.parent.dict_for_yaml["MERGE"]["extension"])
                 self.merge_params.images_ext.setCurrentText(self.parent.dict_for_yaml["MERGE"]["extension"])

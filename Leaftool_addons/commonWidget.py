@@ -95,6 +95,19 @@ def get_files_ext(path, extensions, add_ext=True):
     return all_files, files_ext
 
 
+def check_values(dico_params, primary_key, secondary_key_list, type_value, default_error):
+    # check all boolean values
+    error_keys = []
+    error_message = ""
+    for key in secondary_key_list:
+        if not isinstance(dico_params[primary_key][key], type_value):
+            error_keys.append(key)
+            dico_params[primary_key][key] = default_error
+    if len(error_keys) > 0:
+        error_message = f"ERROR: 'ML' '{' and '.join(error_keys)}' {'is' if len(error_keys)==1 else 'are'} not a valid {type_value} value, please reload valid file"
+    return error_message
+
+
 class Documentator:
     def __init__(self):
         self.dico_doc_rst = {}

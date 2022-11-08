@@ -30,7 +30,7 @@ syspath.insert(0, Path(vrb.folderMacroInterface + "/LeAFtool/").as_posix())
 # Import LeAFtool class
 from Leaftool_addons.DrawCut import DrawCutParams
 from Leaftool_addons.MachineLearning import MachineLearningParams
-from Leaftool_addons.commonWidget import style, scroll_style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool, Documentator
+from Leaftool_addons.commonWidget import style, scroll_style, return_default_folder, TableWidget, TwoListSelection, FileSelectorLeaftool, Documentator, check_values
 # from Leaftool_addons.cmd_LeAFtool import LeAFtool
 
 # configure logger
@@ -249,14 +249,24 @@ class ToolsActivation(qt.QGroupBox):
         try:
             self.loading = True
             if self.parent.dict_for_yaml["PLANT_MODEL"] not in ["banana", "rice"]:
-                self.parent.logger.warning(
-                    f"Warning: arguments PLANT_MODEL:'{self.parent.dict_for_yaml['PLANT_MODEL']}' is not allow, please use only 'banana' or 'rice'")
+                self.parent.logger.error(
+                    f"Error: arguments PLANT_MODEL:'{self.parent.dict_for_yaml['PLANT_MODEL']}' is not allow, please use only 'banana' or 'rice', please reload valid file")
             else:
                 self.plant_model.setCurrentText(self.parent.dict_for_yaml["PLANT_MODEL"])
+
+             # check all boolean values
+            message = check_values(dico_params=self.parent.dict_for_yaml,
+                                   primary_key="RUNSTEP",
+                                   secondary_key_list=["draw", "cut", "ML", "merge"],
+                                   type_value=bool,
+                                   default_error=False)
+            if message:
+                self.parent.logger.error(message)
             self.draw_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["draw"]))
             self.cut_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["cut"]))
             self.ml_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["ML"]))
             self.merge_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["merge"]))
+
             self.csv_file.lineEditFile.setText(self.parent.dict_for_yaml["csv_file"])
             self.list_selection.clean_list()
             self.list_selection.add_right_elements(self.parent.dict_for_yaml["rename"])
@@ -547,7 +557,7 @@ class RunLeAFtool(qt.QWidget):
         """Get warning on txt"""
 
         txt = self.process.widget.toPlainText()
-        if "warning" in txt.lower():
+        if "warning" in txt.lower() or "error" in txt.lower():
             self.warning_found = True
         else:
             self.warning_found = False
@@ -691,10 +701,10 @@ class MainInterface(qt.QMainWindow):
         self.logo_label = qt.QLabel(self)
         self.logo_img = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
 
-        self.logo_img = self.logo_img.scaledToHeight(70, mode=Qt.FastTransformation)
+        self.logo_img = self.logo_img.scaledToHeight(80, mode=Qt.FastTransformation)
         self.logo_label.setPixmap(self.logo_img)
         self.logo_label.setAlignment(Qt.AlignCenter)
-        self.logo_label.setMaximumHeight(70)
+        self.logo_label.setMaximumHeight(80)
 
         # Initialize the 2 tab screen
         self.tabs = qt.QTabWidget()
@@ -712,7 +722,7 @@ class MainInterface(qt.QMainWindow):
         table_group.setTitle("Merge Results")
         table_group.setStyleSheet(style)
         table_group.layout = qt.QVBoxLayout()
-        table_group.layout.setContentsMargins(10, 10, 10, 10)
+        table_group.layout.setContentsMargins(3, 3, 3, 3)
         table_group.setLayout(table_group.layout)
         table_group.layout.addWidget(self.csv_file)
         table_group.layout.addWidget(self.table_final)
@@ -729,25 +739,6 @@ class MainInterface(qt.QMainWindow):
 
         # Edit connection
         self.csv_file.lineEditFile.textChanged.connect(self.update_table)
-
-    # def event(self, event):
-    #     if event.type() == QEvent.EnterWhatsThisMode:  # Event called when ? is clicked
-    #         # qt.QWhatsThis.leaveWhatsThisMode()
-    #         # qt.QWhatsThis.enterWhatsThisMode()  # To change mouse cursor back to arrow
-    #         # Any other code you want could go here
-    #         return True
-    #     # elif event.type() == QtCore.QEvent.LeaveWhatsThisMode:
-    #     #     qt.QWhatsThis.enterWhatsThisMode()
-    #     #     qt.QWhatsThis.
-    #
-    #     return super(MainInterface, self).event(event)
-
-    # def event(self, ev):
-    #     if ev.type() == QEvent.ToolTip:
-    #         QToolTip.hideText()
-    #         ev.ignore()
-    #         return True
-    #     return super().event(ev)
 
     def update_table(self):
         csv_file = self.csv_file.lineEditFile.text()
@@ -776,9 +767,9 @@ def openWidget():
     app.setApplicationDisplayName("LeAFtool")
     # SplashScreen
     pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
-    pixmap = pixmap.scaled(600, 600, aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
+    pixmap = pixmap.scaled(700, 700, aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
     splashScreen = qt.QSplashScreen(pixmap)
-    splashScreen.setFixedSize(600, 600)
+    splashScreen.setFixedSize(700, 700)
     splashScreen.show()
     # Load App interface
     main_interface = MainInterface()
