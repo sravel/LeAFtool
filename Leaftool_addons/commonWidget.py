@@ -54,9 +54,9 @@ int_validator = QIntValidator(0, 9999)  # Create validator.
 def return_default_folder():
     defaultFolder = Dfct.childText(vrb.userPathElement, "ImportImages")
     if defaultFolder is None or defaultFolder == "" or not Path(defaultFolder).exists():
-        defaultFolder = Path(vrb.folderExplorer).parent.joinpath("images")
+        defaultFolder = Path(vrb.folderExplorer).parent.joinpath("images").as_posix()
         if not Path(defaultFolder).exists():
-            defaultFolder = Path(vrb.folderExplorer).parent.joinpath("data", "Explorer", "images")
+            defaultFolder = Path(vrb.folderExplorer).parent.joinpath("data", "Explorer", "images").as_posix()
     return defaultFolder
 
 
