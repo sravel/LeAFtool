@@ -17,16 +17,16 @@ import UsefullFunctions as fct
 import DatabaseFunction as Dfct
 
 
-style = """QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(33, 171, 38)} 
+style = """QGroupBox:title {left: 20px ;padding-left: 10px;padding-right: 10px; padding-top: -12px; color:rgb(129, 184, 114)} 
 QGroupBox {font: bold; border: 1px solid gray; margin-top:12 px; margin-bottom: 0px}
 QDoubleSpinBox:focus {
-border-color: green;
+border-color: #81b872;
 }
 QDoubleSpinBox {
     background-color: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4d4d4d, stop: 0 #646464, stop: 1 #5d5d5d);
 }
 QSpinBox:focus {
-border-color: green;
+border-color: #81b872;
 }
 QSpinBox {
     background-color: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4d4d4d, stop: 0 #646464, stop: 1 #5d5d5d);

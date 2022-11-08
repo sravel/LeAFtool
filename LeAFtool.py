@@ -333,7 +333,7 @@ class LeaftoolParams(qt.QGroupBox):
         self.parent = parent
 
         # Layout Style
-        self.setTitle("LeAFtool params")
+        self.setTitle("LeAFtool")
         self.setStyleSheet(style)
         # self.setAutoFillBackground(True)
         self.layout = qt.QGridLayout()
@@ -440,7 +440,7 @@ class RunLeAFtool(qt.QWidget):
         self.layout = qt.QGridLayout()
         self.layout.setSizeConstraint(qt.QVBoxLayout.SetMinAndMaxSize)
         self.setLayout(self.layout)
-        self.setContentsMargins(10, 10, 10, 10)
+        self.setContentsMargins(0, 0, 0, 0)
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
         self.setStyleSheet(scroll_style)
@@ -689,8 +689,8 @@ class MainInterface(qt.QMainWindow):
         # Layout Style
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.layout = qt.QVBoxLayout(self.main)
-        self.layout.setSizeConstraint(1)
-        self.main.setContentsMargins(5, 5, 5, 5)
+        # self.layout.setSizeConstraint(1)
+        self.main.setContentsMargins(0, 5, 5, 5)
         self.main.setAutoFillBackground(True)
         style_global = fct.getStyleSheet()
         self.setStyleSheet(style_global)
@@ -701,10 +701,10 @@ class MainInterface(qt.QMainWindow):
         self.logo_label = qt.QLabel(self)
         self.logo_img = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/LeAFtool-long.png")
 
-        self.logo_img = self.logo_img.scaledToHeight(90, mode=Qt.FastTransformation)
+        self.logo_img = self.logo_img.scaledToHeight(80, mode=Qt.FastTransformation)
         self.logo_label.setPixmap(self.logo_img)
         self.logo_label.setAlignment(Qt.AlignCenter)
-        self.logo_label.setMaximumHeight(90)
+        self.logo_label.setMaximumHeight(80)
 
         # Initialize the 2 tab screen
         self.tabs = qt.QTabWidget()
@@ -722,7 +722,7 @@ class MainInterface(qt.QMainWindow):
         table_group.setTitle("Merge Results")
         table_group.setStyleSheet(style)
         table_group.layout = qt.QVBoxLayout()
-        table_group.layout.setContentsMargins(3, 3, 3, 3)
+        table_group.layout.setContentsMargins(10, 10, 10, 10)
         table_group.setLayout(table_group.layout)
         table_group.layout.addWidget(self.csv_file)
         table_group.layout.addWidget(self.table_final)
