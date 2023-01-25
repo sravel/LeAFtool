@@ -1,4 +1,5 @@
-#!/home/sebastien/Documents/IPSDK/Explorer_3_1_0_3_linux/Miniconda/bin/python3.8
+#!/opt/programmes/Explorer_3_2_1_2_linux/Miniconda/bin/python3.8
+import sys
 import PyIPSDK
 import PyIPSDK.IPSDKUI as ui
 import PyIPSDK.IPSDKIPLGlobalMeasure as glbmsr
@@ -6,12 +7,13 @@ import PyIPSDK.IPSDKIPLAdvancedMorphology as advmorpho
 import PyIPSDK.IPSDKIPLBinarization as bin
 import PyIPSDK.IPSDKIPLClassification as classif
 import PyIPSDK.IPSDKIPLShapeAnalysis as shapeanalysis
-import PyIPSDK.IPSDKIPLMorphology as morpho
+import PyIPSDK.IPSDKIPLBasicMorphology as morpho
 import PyIPSDK.IPSDKIPLUtility as util
 import PyIPSDK.IPSDKIPLMachineLearning as ml
 import PyIPSDK.IPSDKIPLLogical as logic
 import PyIPSDK.IPSDKIPLArithmetic as arithm
 import PyIPSDK.IPSDKIPLIntensityTransform as itrans
+import PyIPSDK.IPSDKFunctionsMachineLearning as fctML
 
 import xml.etree.ElementTree as xmlet
 import cv2
@@ -502,10 +504,10 @@ class DrawAndCutImages:
         draw_dir_path = self.__scan_folder.joinpath(draw_dir_name)
         draw_dir_path.mkdir(exist_ok=True)
         self.logger.info(f"OUTPUT DRAW directory is: {draw_dir_path}")
-
-        for img_file in self.__scan_folder.glob(f"*.{self.extension}"):
+        nb_files = len(list(self.__scan_folder.glob(f"*.{self.extension}")))
+        for scan_num, img_file in enumerate(self.__scan_folder.glob(f"*.{self.extension}"),1):
             outname = f"{draw_dir_path}/{img_file.stem}_draw.tif"
-            self.logger.info(f"DRAW IMAGE FILE: {img_file.name} to {Path(outname).name}")
+            self.logger.info(f"DRAW IMAGE FILE {scan_num}/{nb_files}: {img_file.name} to {Path(outname).name}")
 
             if not Path(outname).exists() or self.force_rerun:
                 # print(f"\n####### DRAW IMAGE FILE:\n{img_file.name}")
@@ -530,6 +532,7 @@ class DrawAndCutImages:
                                  color=(0, 255, 0),
                                  thickness=4)
                 cv2.imwrite(outname, im_draw)
+                del im_draw
             else:
                 self.logger.warning(f" - {Path(outname).name} Already draw")
         self.logger.info("~~~~~~~~~ END STEP DRAW ~~~~~~~~~")
@@ -1273,7 +1276,7 @@ class Leaf:
                     if self.model_name_classification and label.lower() in ["lesion"]:
                         # ui.displayImg(split_mask_separated_filter, pause=True, title="split_mask_filter_label on
                         # LEAF")
-                        img3 = ui.applySmartClassification(split_mask_separated_filter, ipsdk_img,
+                        img3 = fctML.applySmartClassification(split_mask_separated_filter, ipsdk_img,
                                                            Path(vrb.folderShapeClassification).joinpath(
                                                                f"{self.model_name_classification}").as_posix())
                         # ui.displayImg(img3, pause=True, title="img3 on LEAF")
@@ -1333,7 +1336,7 @@ class LeAFtool:
         self.logger = self.configure_logger('LeAFtool')
         # for printing in logFile
         # cmd_line = " ".join(sys.argv)
-        cmd_line = f"python3 {__file__} -c {Path(config_file).resolve()}"
+        cmd_line = f"{sys.executable} {__file__} -c {Path(config_file).resolve()}"
         self.logger.info(f"{' LeAFtool analysis start ':#^80s}")
         self.logger.info(f"Command line : {cmd_line}")
         self.logger.debug("DEBUG MODE")
@@ -1694,30 +1697,30 @@ def compare_list(list1, list2):
     )
 
 
-def get_last_version(url, current_version):
+def get_last_version(git_url, version):
     """Function for know the last version of Git repo in website"""
     try:
         from urllib.request import urlopen
         from re import search
         import click
-        module_mane = url.split('/')[-1]
-        HTML = urlopen(f"{url}/tags").read().decode('utf-8')
-        str_search = f"{url.replace('https://github.com', '')}/releases/tag/.*"
+        soft_name = "LeAFtool"
         try:
+            HTML = urlopen(f"{git_url}/tags").read().decode('utf-8')
+            str_search = f"{git_url.replace('https://github.com', '')}/releases/tag/.*"
             lastRelease = search(str_search, HTML).group(0).split("/")[-1].split('"')[0]
         except Exception as e:
+            print(e)
             lastRelease = "There aren’t any releases"
         epilogTools = "\n"
-        if str(current_version) != lastRelease:
-            if lastRelease < str(current_version):
-                epilogTools = click.style(f"\n    ** NOTE: This {module_mane} version ({current_version}) is higher than the production version ({lastRelease}), you are using a dev version\n\n", fg="yellow", bold=True)
-            elif lastRelease > str(current_version) and lastRelease != "There aren’t any releases":
-                epilogTools = click.style(f"\n    ** NOTE: The Latest version of {module_mane} {lastRelease} is available at {url}/releases\n\n",fg="yellow", underline=True)
+        if str(version) != lastRelease:
+            if lastRelease < str(version):
+                epilogTools = click.style(f"\n    ** NOTE: This {soft_name} version ({version}) is higher than the production version ({lastRelease}), you are using a dev version\n\n", fg="yellow", bold=True)
+            elif lastRelease > str(version) and lastRelease != "There aren’t any releases":
+                epilogTools = click.style(f"\n    ** NOTE: The Latest version of {soft_name} {lastRelease} is available at {git_url}\n\n", fg="yellow", underline=True)
             elif lastRelease == "There aren’t any releases":
                 epilogTools = click.style(f"\n    ** NOTE: There aren’t any releases at the moment\n\n", fg="red", underline=False)
             else:
                 epilogTools = click.style(f"\n    ** NOTE: Can't check if new release are available\n\n", fg="red", underline=False)
-
         return epilogTools
     except Exception as e:
         epilogTools = click.style(f"\n    ** ENABLE TO GET LAST VERSION, check internet connection\n{e}\n\n", fg="red")
@@ -1754,7 +1757,7 @@ description_tools = f"""
     Licencied under CeCill-C (http://www.cecill.info/licences/Licence_CeCILL-C_V1-en.html)
     and GPLv3 Intellectual property belongs to CIRAD and authors.
     Documentation avail at: {DOCS}
-    {get_last_version(url=GIT_URL, current_version=__version__)}"""
+    {get_last_version(git_url=GIT_URL, version=__version__)}"""
 
 
 @click.command("cmd_LeAFtool", short_help=click.secho(description_tools, fg='green', nl=False),

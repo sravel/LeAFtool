@@ -171,10 +171,9 @@ class FileSelectorLeaftool(qt.QGroupBox):
         # dlg.setFilter(dlg.filter() | QDir.Hidden)
         defaultFolder = return_default_folder()
         if self.is_file:
-            filename = qt.QFileDialog.getOpenFileName(self, caption="Select your file",
+            filename = dlg.getOpenFileName(self, caption="Select your file",
                                                       directory=defaultFolder,
                                                       filter="table file (*.csv *.tsv)")
-            # options=qt.QFileDialog.DontUseNativeDialog)
             filename = filename[0]
         else:
             dlg.setOption(dlg.ShowDirsOnly, True)
