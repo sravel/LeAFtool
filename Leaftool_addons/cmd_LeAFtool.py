@@ -1196,7 +1196,8 @@ class Leaf:
             split_mask_filter_bin = bin.thresholdImg(split_mask_filter, 0, 0)
             logic.logicalNotImg(split_mask_filter_bin, split_mask_filter_bin)
             split_mask_filter_UInt16 = util.convertImg(split_mask_filter_bin, PyIPSDK.eImageBufferType.eIBT_UInt16)
-        label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i - 1)
+        split_mask_filter_UInt16 = itrans.normalizeImg(split_mask_filter_UInt16, PyIPSDK.createRange(0, 65535))
+        label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i)
         self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
         # ui.displayImg(self.image_label_blend, pause=True, title="self.image_label_blend")
 
