@@ -1,5 +1,6 @@
 import logging.config
-from sys import path as syspath
+import os, sys
+from sys import path as syspath, executable
 import subprocess
 from pathlib import Path
 import yaml
@@ -13,6 +14,7 @@ from functools import partial
 
 import PyIPSDK
 
+python_exe = sys.executable
 
 # auto add Explorer in PYTHONPATH
 explorer_path = Path(PyIPSDK.getPyIPSDKDir()).parent.parent.joinpath("Explorer", "Interface")
@@ -514,8 +516,11 @@ class RunLeAFtool(qt.QWidget):
     def start_threads(self):
         self.process.clear()
         # self.leaftool = LeAFtool(config_file=self.yaml_path)
-        cmd = f"python3 {Path(__file__).parent.joinpath('Leaftool_addons', 'cmd_LeAFtool.py')} -c {Path(self.yaml_path).resolve()}"
-        self.running_process = subprocess.Popen("exec " + cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        # cmd = f"{python_exe} {Path(__file__).parent.joinpath('Leaftool_addons', 'cmd_LeAFtool.py')} -c {Path(self.yaml_path).resolve()}"
+        # self.running_process = subprocess.Popen("exec " + cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=os.environ)
+        cmd = f"source /etc/profile; {executable} {Path(__file__).parent.joinpath('Leaftool_addons', 'cmd_LeAFtool.py')} -c {Path(self.yaml_path).resolve()}"
+        self.logger.info(cmd)
+        self.running_process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, executable="/bin/bash")
         with self.running_process:
             for line in iter(self.running_process.stdout.readline, b''):
                 line = line.decode("utf-8").rstrip().rstrip()

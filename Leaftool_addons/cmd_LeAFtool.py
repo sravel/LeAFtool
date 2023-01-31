@@ -77,12 +77,15 @@ pd.set_option('display.precision', 9)
 
 def read_image_UINT16(path_image):
     extension = Path(path_image).suffix[1:]
+
     if extension in ["tif", "tiff", "TIF", "TIFF", "Tif", "Tiff"]:
         imageIP = PyIPSDK.loadTiffImageFile(path_image)
+        range_UInt16 = PyIPSDK.createRange(0, 65535)
+        imageIP = util.convertImg(imageIP, PyIPSDK.eImageBufferType.eIBT_UInt16)
+        imageIP = itrans.normalizeImg(imageIP, range_UInt16)
     elif extension in ["im6", "IM6"]:
         imageIP = PyIPSDK.loadIm6ImageFile(path_image)
     elif extension in ["jpg", "JPG", "PNG", "png", "BMP", "bmp"]:
-
         image_load = cv2.imread(path_image, -1)
         image = (image_load * 256).astype('uint16')
         b, g, r = 0, 0, 0
@@ -436,7 +439,7 @@ class DrawAndCutImages:
         def save_image(img, pos):
             basename = self.meta_info.meta_to_cut_rename(scan_name=img, pos=pos)
             file_name = cut_dir_path.joinpath(f"{basename}.tif")
-            if basename and not Path(file_name).exists():
+            if basename and not Path(file_name).exists() or self.force_rerun:
                 imageIP = util.getROI2dImg(im_borderless, *box)
                 if self.noise_rm:
                     # image noise removal
@@ -940,7 +943,7 @@ class AnalysisImages:
         if self.plant_model == "banana":
             small_size = 105000
         elif self.plant_model == "rice":
-            small_size = 37000
+            small_size = 100000
         ##############################################
         # If machine learning for extract
         if self.split_ML:
@@ -1133,12 +1136,9 @@ class Leaf:
         # check if mask is empty after remove small elements
         nbLabels = glbmsr.statsMsr2d(split_mask_separated_filter).max
         if nbLabels >= 0:
-            if split_mask_separated_filter.hasGeometricCalibration():
-                calibration = split_mask_separated_filter.getGeometricCalibration()
-            else:
-                calibration = PyIPSDK.createGeometricCalibration2d(calibration_obj.dico_info["value"],
-                                                                   calibration_obj.dico_info["value"],
-                                                                   calibration_obj.dico_info["unit"])
+            calibration = PyIPSDK.createGeometricCalibration2d(calibration_obj.dico_info["value"],
+                                                               calibration_obj.dico_info["value"],
+                                                               calibration_obj.dico_info["unit"])
 
             inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
             PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Area2dMsr",
