@@ -467,7 +467,8 @@ class DrawAndCutImages:
         if self.meta_info.exit_status:
             for scan_num, img_file in enumerate(self.__scan_folder.glob(f"*.{self.extension}"), 1):
                 self.logger.info(f"CROP IMAGE FILE {scan_num}/{nb_files}:\t{img_file.name} to ")
-                image = read_image_UINT16(img_file.as_posix())
+                # image = read_image_UINT16(img_file.as_posix())
+                image = fct.urlToPythonImage(img_file.as_posix())
                 x_size = image.getGeometry().getSizeX()
                 y_size = image.getGeometry().getSizeY()
                 w = x_size - (self.params["left"] + self.params["right"])
@@ -549,7 +550,7 @@ class AnalysisImages:
     def __init__(self, scan_folder, model_name, csv_file, rename, calibration_name=None, small_object=100, border=0,
                  alpha=0.5,
                  noise_remove=False, split_ML=False, force_rerun=True, draw_ML_image=False, plant_model=None,
-                 model_name_classification=None, color_lesion_individual=False):
+                 model_name_classification=None, color_lesion_individual=None):
         """
         Args:
             scan_folder (:obj:`str`): Path to scan images
@@ -748,13 +749,6 @@ class AnalysisImages:
         # load full image (ie with all leaves)
         self.full_leaves_ipsdk_img = PyIPSDK.loadTiffImageFile(image_path)
 
-        # if self.full_leaves_ipsdk_img.getBufferType() != PyIPSDK.eIBT_UInt16:
-        #     range_UInt16 = PyIPSDK.createRange(0, 65535)
-        #     convert_UInt16 = util.convertImg(self.full_leaves_ipsdk_img, PyIPSDK.eIBT_UInt16)
-        #     self.full_leaves_ipsdk_img = itrans.normalizeImg(convert_UInt16, range_UInt16)
-        #     PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"2021-08-19_convert_fields_magna.tif").as_posix(),
-        #     self.full_leaves_ipsdk_img)
-
         x_size = self.full_leaves_ipsdk_img.getGeometry().getSizeX()
         y_size = self.full_leaves_ipsdk_img.getGeometry().getSizeY()
         if self.noise_remove:
@@ -770,7 +764,6 @@ class AnalysisImages:
             dict_frames_separated_leaves = {}
 
             # loop for cut image and apply machine learning
-            list_leaves_overlay = []
             list_leaves_overlay_IPSDK = []
             for leaf in self.table_leaves:
                 self.logger.info(f" - Read and extract lesion on leaf {leaf.leaf_id}/{len(self.table_leaves)}")
@@ -779,26 +772,12 @@ class AnalysisImages:
                               model_classification_to_label_dict=self.model_classification_to_label_dict,
                               small_object=self.small_object,
                               calibration_obj=self.calibration_obj,
-                              model_name_classification=self.model_name_classification,
-                              color_lesion_individual=self.color_lesion_individual)
+                              model_name_classification=self.model_name_classification
+                              )
                 dict_frames_separated_leaves.update(leaf.dico_frames_separated)
-                list_leaves_overlay.append(leaf)
                 list_leaves_overlay_IPSDK.append(leaf)
-
-            # build final image with filter overlay
-            geometryRgb2 = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Int32, x_size, y_size)
-            overlayImagefilter = PyIPSDK.createImage(geometryRgb2)
-            util.eraseImg(overlayImagefilter, 0)
-            # add leaf mask to full leaves overlay
-            for leaf in list_leaves_overlay:
-                # ui.displayImg(overlayImagefilter, pause=True)
-                # ui.displayImg(leaf.image_label_blend, pause=True)
-                util.putROI2dImg(overlayImagefilter, leaf.image_label_blend, leaf.x_position, leaf.y_position,
-                                 overlayImagefilter)
-
             # build IPSDK overlay
             # loop for all label to extract IPSDK label image:
-            # print(leaf.image_ipsdk_blend_dict_class.items())
             dico_label_overlay_IPSDK = {}
             for leaf in list_leaves_overlay_IPSDK:
                 for label, img in leaf.image_ipsdk_blend_dict_class.items():
@@ -812,7 +791,7 @@ class AnalysisImages:
                     # ui.displayImg(img, pause=True, title=f"{label} {len(dico_label_overlay_IPSDK)}")
                     util.putROI2dImg(dico_label_overlay_IPSDK[label], img, leaf.x_position, leaf.y_position,
                                      dico_label_overlay_IPSDK[label])
-                    # ui.displayImg(overlayImagefilterIPSDK, pause=True)
+                    # ui.displayImg(dico_label_overlay_IPSDK[label], pause=True)
             for label, img_overlay in dico_label_overlay_IPSDK.items():
                 # ui.displayImg(img_overlay, pause=True, title=f" {basename}_{label}_overlay_ipsdk.tif   {label}")
                 PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_{label}_overlay_ipsdk.tif").as_posix(),
@@ -823,8 +802,9 @@ class AnalysisImages:
                                          keys=dict_frames_separated_leaves.keys(), ignore_index=True)
 
             self.__build_df_split(basename, result_separated)
+
             # call blend to build mask overlay
-            self.__blend_overlay(basename, overlayImagefilter)
+            self.__blend_overlay(basename, dico_label_overlay_IPSDK)
 
     @staticmethod
     def __bary_sort(list_to_order):
@@ -834,29 +814,52 @@ class AnalysisImages:
         else:
             return (x_bary * 6 + y_bary * 3) / (2.5 * x_size)
 
-    def __blend_overlay(self, basename, ov):
-        ov = util.convertImg(ov, PyIPSDK.eIBT_UInt16)
-        # print(self.model_to_label_dict)
-        # ui.displayImg(ov, pause=True)
-        color_label_to_RGB_Uint16blend = {}
-        for label in self.model_to_label_dict.keys():
-            i = self.model_to_label_dict[label]["value"]
+    def __blend_overlay(self, basename, dico_label_overlay_IPSDK):
+        color_label_to_RGB_blend = {}
+        all_labels_image = None
+        # loop of all label_16 image by class (leaf, lesion, proba, others)
+        dico_label_overlay_IPSDK.pop('proba')
+        dico_label_overlay_IPSDK.pop('leaf')
+        for label, img_label in dico_label_overlay_IPSDK.items():
+            indice_label = self.model_to_label_dict[label]["value"]
             colors_label = self.model_to_label_dict[label]["color"]
-            colors_UINT16 = [int(i * 256) for i in colors_label]
-            color_label_to_RGB_Uint16blend[i - 1] = colors_UINT16  # -1 car pas de leaf
-        color_label_to_RGB_Uint16blend[0] = [0, 0, 0]
+            colors_UINT = [int(i) for i in colors_label]
+            color_label_to_RGB_blend[indice_label] = colors_UINT
+
+            # convert split labels to 1 value to apply good colorLUT
+            if label == "lesion" and self.color_lesion_individual:
+                # ui.displayImg(img_label, pause=True, title=f"img_label for class: {label}")
+                label_value = util.convertImg(img_label, PyIPSDK.eImageBufferType.eIBT_Label8)
+            else:
+                bin_labels = bin.thresholdImg(img_label, 0, 0)
+                logic.logicalNotImg(bin_labels, bin_labels)
+                int_label_value = arithm.multiplyScalarImg(bin_labels, indice_label)
+                label_value = util.convertImg(int_label_value, PyIPSDK.eImageBufferType.eIBT_Label8)
+            # ui.displayImg(label_value, pause=True, title=f"label_value for class: {label}")
+            if not all_labels_image:
+                all_labels_image = label_value
+            else:
+                all_labels_image = arithm.addImgImg(all_labels_image, label_value)
+            all_labels_image = util.convertImg(all_labels_image, PyIPSDK.eImageBufferType.eIBT_Label8)
+        color_label_to_RGB_blend[0] = [0, 0, 0]
+        # ui.displayImg(all_labels_image, pause=True, title=f"all_labels_image")
+
+        # Convert the input image if necessary
+        im_UInt8 = self.full_leaves_ipsdk_img
+        if im_UInt8.getBufferType() != PyIPSDK.eIBT_UInt8:
+            range_UInt8 = PyIPSDK.createRange(0, 255)
+            im_normalized = itrans.normalizeImg(self.full_leaves_ipsdk_img, range_UInt8)
+            im_UInt8 = util.convertImg(im_normalized, PyIPSDK.eIBT_UInt8)
         # Count the number of labels
-        # if self.color_lesion_individual:
-        nbLabels = glbmsr.statsMsr2d(ov).max
-        # else:
-        #     nbLabels = 1
+        statsRes = glbmsr.statsMsr2d(all_labels_image)
+        nbLabels = statsRes.max
 
         # Create 3 random LUTs (one per channel)
-        randValues = np.random.rand(3, int(nbLabels + 1)) * 65535
-        for i in color_label_to_RGB_Uint16blend:
+        randValues = np.random.rand(3, int(nbLabels + 1)) * 255
+        for i in color_label_to_RGB_blend:
             if i <= nbLabels:
                 for c in range(3):
-                    randValues[c][i] = color_label_to_RGB_Uint16blend[i][c]
+                    randValues[c][i] = color_label_to_RGB_blend[i][c]
 
         lutR = PyIPSDK.createIntensityLUT(0, 1, randValues[0, :])
         lutG = PyIPSDK.createIntensityLUT(0, 1, randValues[1, :])
@@ -864,33 +867,31 @@ class AnalysisImages:
         colorLut = [lutR, lutG, lutB]
 
         # Convert the label image to a color image
-        overlayImage = PyIPSDK.createImage(self.full_leaves_ipsdk_img.getGeometry())
+        overlayImage = PyIPSDK.createImage(im_UInt8.getGeometry())
 
         for c in range(0, 3):
             plan = PyIPSDK.extractPlan(0, c, 0, overlayImage)
-            itrans.lutTransform2dImg(ov, colorLut[c], plan)
+            itrans.lutTransform2dImg(all_labels_image, colorLut[c], plan)
 
-        # ui.displayImg(overlayImage, pause=True)
         # Blending
-        blend = arithm.blendImgImg(self.full_leaves_ipsdk_img, overlayImage, 1 - self.alpha)
+        blend = arithm.blendImgImg(im_UInt8, overlayImage, 1-self.alpha)
         # change alpha blending see https://fr.wikipedia.org/wiki/Alpha_blending
-        # blend = itrans.normalizeImg(blend, PyIPSDK.createRange(0, 65535))
-        blend = util.convertImg(blend, PyIPSDK.eIBT_UInt16)
+        blend = itrans.normalizeImg(blend, PyIPSDK.createRange(0, 255))
+        blend = util.convertImg(blend, PyIPSDK.eIBT_UInt8)
 
-        mask = bin.lightThresholdImg(ov, 1)
-        binaryGeometry = PyIPSDK.geometryRgb2d(PyIPSDK.eIBT_Binary, self.full_leaves_ipsdk_img.getSizeX(),
-                                               self.full_leaves_ipsdk_img.getSizeY())
+        mask = bin.lightThresholdImg(all_labels_image, 1)
+        binaryGeometry = PyIPSDK.geometryRgb2d(PyIPSDK.eIBT_Binary, im_UInt8.getSizeX(), im_UInt8.getSizeY())
         maskImage = PyIPSDK.createImage(binaryGeometry)
 
         for c in range(0, 3):
             plan = PyIPSDK.extractPlan(0, c, 0, maskImage)
             util.copyImg(mask, plan)
 
-        # ui.displayImg(self.full_leaves_ipsdk_img, pause=True)
-        logic.maskImgImg(blend, self.full_leaves_ipsdk_img, maskImage, blend)
+        logic.maskImgImg(blend, im_UInt8, maskImage, blend)
+
         # loop to add leaf if draw True
         if self.draw_ML_image:
-            leaf_color = [int(i * 256) for i in self.model_to_label_dict["leaf"]["color"]]
+            leaf_color = [int(i) for i in self.model_to_label_dict["leaf"]["color"]]
             for leaf in self.table_leaves:
                 self.__drawRectangle(image=blend,
                                      x=leaf.x_position,
@@ -1121,12 +1122,9 @@ class Leaf:
         self.y_position = int(y_pos)
         self.x_size = int(x_size)
         self.y_size = int(y_size)
-        self.color_lesion_individual = None
 
         self.full_leaves_ipsdk_img = full_leaves_ipsdk_img
 
-        self.image_label_blend = None
-        self.image_ipsdk_blend = None
         self.image_ipsdk_blend_dict_class = {}
 
         self.dico_frames_separated = {}
@@ -1188,24 +1186,10 @@ class Leaf:
             df.insert(0, "leaf_ID", self.leaf_id)
             self.dico_frames_separated[f"{label}-{self.leaf_id}"] = df
 
-    def label_to_overlay_blend(self, split_mask_filter, i):
-        # use to generate on overlay image with overlay function
-        if self.color_lesion_individual:
-            split_mask_filter_UInt16 = util.convertImg(split_mask_filter, PyIPSDK.eImageBufferType.eIBT_UInt16)
-        else:
-            split_mask_filter_bin = bin.thresholdImg(split_mask_filter, 0, 0)
-            logic.logicalNotImg(split_mask_filter_bin, split_mask_filter_bin)
-            split_mask_filter_UInt16 = util.convertImg(split_mask_filter_bin, PyIPSDK.eImageBufferType.eIBT_UInt16)
-        split_mask_filter_UInt16 = itrans.normalizeImg(split_mask_filter_UInt16, PyIPSDK.createRange(0, 65535))
-        label_img = arithm.multiplyScalarImg(split_mask_filter_UInt16, i)
-        self.image_label_blend = arithm.addImgImg(self.image_label_blend, label_img)
-        # ui.displayImg(self.image_label_blend, pause=True, title="self.image_label_blend")
-
     def analysis(self, model_load, model_to_label_dict, model_classification_to_label_dict, small_object,
                  calibration_obj, save_cut=False,
-                 model_name_classification=None, color_lesion_individual=False):
+                 model_name_classification=None):
         self.model_name_classification = model_name_classification
-        self.color_lesion_individual = color_lesion_individual
         ipsdk_img = util.getROI2dImg(self.full_leaves_ipsdk_img, self.x_position, self.y_position, self.x_size,
                                      self.y_size)
         if save_cut:
@@ -1216,6 +1200,7 @@ class Leaf:
 
         # apply smart segmentation machine learning
         all_masks, imageProbabilities = ml.pixelClassificationRFWithProbabilitiesImg(ipsdk_img, model_load)
+
         def save_proba(imageProbabilities):
             outImage = util.copyImg(imageProbabilities)
             outImage = util.convertImg(outImage, PyIPSDK.eIBT_UInt8)
@@ -1241,11 +1226,10 @@ class Leaf:
         # create empty overlay for split lesions image with original size
         self.image_ipsdk_blend = PyIPSDK.createImage(all_masks, PyIPSDK.eImageBufferType.eIBT_Label16)
         util.eraseImg(self.image_ipsdk_blend, 0)
-        # ui.displayImg(all_masks, pause=True, title="all_masks on LOOP")
         # loop for label found on ML
         for label in model_to_label_dict.keys():
-            i = int(model_to_label_dict[label]["value"])
-            if i != 0:  # remove first class ie background
+            indice_class = int(model_to_label_dict[label]["value"])
+            if indice_class != 0:  # remove first class ie background
                 nbLabels = glbmsr.statsMsr2d(all_masks).max  # count nb label for extract complet leaf
                 if label.lower() in ["leaf"]:  # if leaf
                     split_mask = bin.thresholdImg(all_masks, 1, nbLabels)
@@ -1263,7 +1247,7 @@ class Leaf:
                     self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
                     self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
                 else:
-                    split_mask = bin.thresholdImg(all_masks, i, i)
+                    split_mask = bin.thresholdImg(all_masks, indice_class, indice_class)
                     # remove small elements if < x px on connected
                     split_mask_filter = advmorpho.removeSmallShape2dImg(split_mask, small_object)
                     # split mask to individual label
@@ -1294,14 +1278,12 @@ class Leaf:
                             self.label_image_to_df(split_mask_separated_filter, calibration_obj, label_classification)
                             # ui.displayImg(split_mask_separated_filter, pause=True, title=f"split_mask_separated_filter on {label_classification} LEAF")
                             self.image_ipsdk_blend_dict_class[label_classification] = split_mask_separated_filter
-                            if label_classification.lower() in ["lesion"]:
-                                self.label_to_overlay_blend(split_mask_separated_filter, i)
+
                     if label.lower() in ["lesion"] and not self.model_name_classification:
-                        self.label_to_overlay_blend(split_mask_separated_filter, i)
                         self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
                         self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
                     if label.lower() not in ["lesion"]:
-                        self.label_to_overlay_blend(split_mask_separated_filter, i)
+
                         self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
                         self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
         for img in self.image_ipsdk_blend_dict_class.values():
