@@ -439,7 +439,7 @@ class DrawAndCutImages:
         def save_image(img, pos):
             basename = self.meta_info.meta_to_cut_rename(scan_name=img, pos=pos)
             file_name = cut_dir_path.joinpath(f"{basename}.tif")
-            if basename and not Path(file_name).exists() or self.force_rerun:
+            if basename and (not Path(file_name).exists() or self.force_rerun):
                 imageIP = util.getROI2dImg(im_borderless, *box)
                 if self.noise_rm:
                     # image noise removal
@@ -786,11 +786,22 @@ class AnalysisImages:
                             geometryRgb2_label = PyIPSDK.geometryRgb2d(PyIPSDK.eImageBufferType.eIBT_UInt16, x_size, y_size)
                         else:
                             geometryRgb2_label = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Label16, x_size, y_size)
+                            temp_img = PyIPSDK.createImage(geometryRgb2_label)
+                            util.eraseImg(temp_img, 0)
+
                         dico_label_overlay_IPSDK[label] = PyIPSDK.createImage(geometryRgb2_label)
                         util.eraseImg(dico_label_overlay_IPSDK[label], 0)
-                    # ui.displayImg(img, pause=True, title=f"{label} {len(dico_label_overlay_IPSDK)}")
-                    util.putROI2dImg(dico_label_overlay_IPSDK[label], img, leaf.x_position, leaf.y_position,
-                                     dico_label_overlay_IPSDK[label])
+
+                    if label == "proba":
+                        util.putROI2dImg(dico_label_overlay_IPSDK[label], img, leaf.x_position, leaf.y_position,
+                                         dico_label_overlay_IPSDK[label])
+                    else:
+                        util.putROI2dImg(temp_img, img, leaf.x_position, leaf.y_position, temp_img)
+                        dico_label_overlay_IPSDK[label] = arithm.addImgImg(temp_img, dico_label_overlay_IPSDK[label])
+                        dico_label_overlay_IPSDK[label] = util.convertImg(dico_label_overlay_IPSDK[label],
+                                                                          PyIPSDK.eImageBufferType.eIBT_Label16)
+                        temp_img = PyIPSDK.createImage(geometryRgb2_label)
+                        util.eraseImg(temp_img, 0)
                     # ui.displayImg(dico_label_overlay_IPSDK[label], pause=True)
             for label, img_overlay in dico_label_overlay_IPSDK.items():
                 # ui.displayImg(img_overlay, pause=True, title=f" {basename}_{label}_overlay_ipsdk.tif   {label}")
@@ -971,8 +982,8 @@ class AnalysisImages:
         # suppression des artefacts pour obtenir le mask des feuilles
         # ui.displayImg(all_mask, pause=True, title="all_maskLeaf")
         if self.plant_model == "banana":
-            all_mask_filter = advmorpho.removeBorder2dImg(all_mask)
-            all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask_filter, small_size)
+            # all_mask_filter = advmorpho.removeBorder2dImg(all_mask)
+            all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask, small_size)
             structuringElement = PyIPSDK.circularSEXYInfo(3)
             all_mask_filter = morpho.closing2dImg(all_mask_filter, structuringElement, PyIPSDK.eBEP_Disable)
             # ui.displayImg(all_mask_filter, pause=True, title="all_mask_filter")
