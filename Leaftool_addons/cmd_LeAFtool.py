@@ -797,6 +797,9 @@ class AnalysisImages:
                                          dico_label_overlay_IPSDK[label])
                     else:
                         util.putROI2dImg(temp_img, img, leaf.x_position, leaf.y_position, temp_img)
+                        if label == "leaf":
+                            temp_img = arithm.multiplyScalarImg(temp_img, leaf.leaf_id)
+
                         dico_label_overlay_IPSDK[label] = arithm.addImgImg(temp_img, dico_label_overlay_IPSDK[label])
                         dico_label_overlay_IPSDK[label] = util.convertImg(dico_label_overlay_IPSDK[label],
                                                                           PyIPSDK.eImageBufferType.eIBT_Label16)
