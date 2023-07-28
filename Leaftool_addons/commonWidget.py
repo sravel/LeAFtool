@@ -7,6 +7,7 @@ from pathlib import Path
 from pandas import read_csv
 from re import match
 from docutils.core import publish_parts
+import xml.etree.ElementTree as xmlet
 
 syspath.insert(0, Path("../").as_posix())
 
@@ -241,8 +242,10 @@ class SpinBoxLabel(qt.QGroupBox):
 
 
 def randomPastelColor(i):
+    from random import randint
     # colors = [171, 54, 114, 5, 231, 187, 254, 7, 214, 192, 50, 258, 48, 56, 107, 255, 33, 34, 177, 246]
-    colors = [10, 30, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 255, 33, 34, 177, 246, 171, 54, 114, 5, 231, 187, 254, 7, 214, 192, 50, 258, 48, 56, 107, 255, 33, 34, 177, 246]
+    # colors = [10, 30, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 255, 33, 34, 177, 246, 171, 54, 114, 5, 231, 187, 254, 7, 214, 192, 50, 258, 48, 56, 107, 255, 33, 34, 177, 246]
+    colors = [randint(10, 359) for color in range(0, 150)]
     saturation = 90
     light = 90
     return QColor.fromHsl(colors[i], int(saturation * 255 / 100), int(light * 255 / 100), 100)
@@ -323,6 +326,7 @@ class TableWidget(qt.QTableWidget):
 
     def cellClick(self, cellItem):
         if vrb.mainWindow:
+            functionXmlElement = xmlet.Element('FunctionCall')
             rowValue, columnValue = cellItem.row(), cellItem.column()
             text = self.item(rowValue, self.indice_cut_name).text()  # On peut récupérer les coordonnées et le texte de la cellule sur laquelle on a cliqué
             if rowValue != self.old_selection[0] and text != self.old_selection[1]:
@@ -339,14 +343,13 @@ class TableWidget(qt.QTableWidget):
                 class_label = "lesion"
                 nameImageInput = f"{self.path_images}/{text}.tif"
                 imageInput = PyIPSDK.loadTiffImageFile(nameImageInput)
-
-                vrb.mainWindow.widgetLabelImage.addNewImage(text, imageInput)
+                label, name = vrb.mainWindow.widgetLabelImage.addNewImage(text, imageInput, functionXmlElement)
 
                 all_overlay_path = Path(self.path_images).glob(f'*{text}*_overlay_ipsdk.tif')
                 for file in all_overlay_path:
                     label = file.stem.split("_")[-3]
                     image = PyIPSDK.loadTiffImageFile(file.as_posix())
-                    vrb.mainWindow.widgetLabelImage.addNewImage(f"{label}_overlay", image)
+                    label, name = vrb.mainWindow.widgetLabelImage.addNewImage(f"{label}_overlay", image, functionXmlElement)
 
                 for num in range(
                         vrb.mainWindow.widgetLabelImage.layout.count()):  # Boucle pour afficher l'image "Image" et l'image "Result" en overlay
