@@ -644,7 +644,7 @@ class RunLeAFtool(qt.QWidget):
         filename = filename[0]
         if filename != "" and filename:
             self.yaml_path = filename
-            with open(self.yaml_path, "w") as write_yaml:
+            with open(self.yaml_path, "w", encoding='UTF-8', newline='\n') as write_yaml:
                 write_yaml.write(self.export_use_yaml)
             Dfct.SubElement(vrb.userPathElement, "ImportImages").text = Path(filename).parent.as_posix()
             Dfct.saveXmlElement(vrb.userPathElement, vrb.folderInformation + "/UserPath.mho", forceSave=True)
