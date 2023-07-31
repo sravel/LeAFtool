@@ -181,11 +181,15 @@ class MetaInfo:
         for elm in self.rename_order:
             if elm not in self.header:
                 raise ValueError(f"Value '{elm}' in not on the header file {self.path_csv}, found: {self.header}")
-
-        df = pd.read_csv(self.path_csv, index_col=[0, 1], header=0, sep=csv_separator)
-        self.dataframe = pd.read_csv(self.path_csv, header=0, sep=csv_separator).reset_index(drop=True)
-        self.__dict_names_pos = df.to_dict('index')
-        self.__list_filenames = [str(key1) for (key1, key2) in self.__dict_names_pos.keys()]
+        try:
+            df = pd.read_csv(self.path_csv, index_col=[0, 1], header=0, sep=csv_separator)
+            self.dataframe = pd.read_csv(self.path_csv, header=0, sep=csv_separator).reset_index(drop=True)
+            self.__dict_names_pos = df.to_dict('index')
+            self.__list_filenames = [str(key1) for (key1, key2) in self.__dict_names_pos.keys()]
+        except ValueError:
+            df = pd.read_csv(self.path_csv, index_col=False, header=0, sep=csv_separator)
+            duplicate = df.iloc[:, 0:2].duplicated()
+            raise ValueError(f"Found {duplicate.sum()} duplicate lines:\n\n{df[duplicate].iloc[:, 0:2]}\n\n on file {self.path_csv}")
 
     def check_corresponding(self, files_list):
         """test if all scan file have name on csv file"""
@@ -591,6 +595,7 @@ class AnalysisImages:
         self.parseDataframes = ParseDataframe(csv_path=csv_file, rename_oder=rename, basedir=self.basedir, calibration_unit=self.calibration_obj.dico_info['unit'])
 
         self.full_leaves_ipsdk_img = None
+        self.full_leaves_label_img = None
         self.full_files = []
         self.mask_overlay_files = []
         self.files_to_run = []
@@ -741,6 +746,16 @@ class AnalysisImages:
         self.parseDataframes.generate(sep=",")
         self.logger.info("~~~~~~~~~ END MERGE CSV ~~~~~~~~~")
 
+    def get_dataframe_size_object(self, label_mask):
+        """return dataframe with the size of all object"""
+        calibration = PyIPSDK.createGeometricCalibration2d(1, 1, 'px')
+        inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
+        PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "NbPixels2dMsr")
+        outset_size = shapeanalysis.labelAnalysis2d(label_mask, label_mask, inMeasureInfoSet2d)
+        df = outset_to_df(outset_size)
+        print(df.sort_values(by="Number of pixels"))
+        return df
+
     def analyse_leaves(self, image_path):
         # extract path/name from image path
         path_img = Path(image_path)
@@ -780,32 +795,31 @@ class AnalysisImages:
             # loop for all label to extract IPSDK label image:
             dico_label_overlay_IPSDK = {}
             for leaf in list_leaves_overlay_IPSDK:
+                # self.logger.debug(f"LEAF ID! {leaf.leaf_id}")
                 for label, img in leaf.image_ipsdk_blend_dict_class.items():
+                    if label == "proba":
+                        geometryRgb2_label = PyIPSDK.geometryRgb2d(PyIPSDK.eImageBufferType.eIBT_UInt16, x_size, y_size)
+                    else:
+                        geometryRgb2_label = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Label16, x_size, y_size)
                     if label not in dico_label_overlay_IPSDK:
-                        if label == "proba":
-                            geometryRgb2_label = PyIPSDK.geometryRgb2d(PyIPSDK.eImageBufferType.eIBT_UInt16, x_size, y_size)
-                        else:
-                            geometryRgb2_label = PyIPSDK.geometry2d(PyIPSDK.eImageBufferType.eIBT_Label16, x_size, y_size)
-                            temp_img = PyIPSDK.createImage(geometryRgb2_label)
-                            util.eraseImg(temp_img, 0)
-
                         dico_label_overlay_IPSDK[label] = PyIPSDK.createImage(geometryRgb2_label)
                         util.eraseImg(dico_label_overlay_IPSDK[label], 0)
 
+                    temp_img = PyIPSDK.createImage(geometryRgb2_label)
+                    util.eraseImg(temp_img, 0)
+                    util.putROI2dImg(temp_img, img, leaf.x_position, leaf.y_position, temp_img)
+                    binary_label_leaves = bin.thresholdImg(self.full_leaves_label_img, leaf.leaf_id, leaf.leaf_id)
+                    temp_img = logic.maskImg(temp_img, binary_label_leaves)
+                    # ui.displayImg(temp_img, pause=False, title=f"temp_img LABEL:{label} {leaf.leaf_id}")
+                    dico_label_overlay_IPSDK[label] = arithm.addImgImg(temp_img, dico_label_overlay_IPSDK[label])
                     if label == "proba":
-                        util.putROI2dImg(dico_label_overlay_IPSDK[label], img, leaf.x_position, leaf.y_position,
-                                         dico_label_overlay_IPSDK[label])
+                        dico_label_overlay_IPSDK[label] = util.convertImg(dico_label_overlay_IPSDK[label], PyIPSDK.eImageBufferType.eIBT_UInt16)
                     else:
-                        util.putROI2dImg(temp_img, img, leaf.x_position, leaf.y_position, temp_img)
-                        if label == "leaf":
-                            temp_img = arithm.multiplyScalarImg(temp_img, leaf.leaf_id)
+                        dico_label_overlay_IPSDK[label] = util.convertImg(dico_label_overlay_IPSDK[label], PyIPSDK.eImageBufferType.eIBT_Label16)
+                    # ui.displayImg(dico_label_overlay_IPSDK[label], pause=True, title=f"LABEL:{label} {leaf.leaf_id}, after addImgImg")
 
-                        dico_label_overlay_IPSDK[label] = arithm.addImgImg(temp_img, dico_label_overlay_IPSDK[label])
-                        dico_label_overlay_IPSDK[label] = util.convertImg(dico_label_overlay_IPSDK[label],
-                                                                          PyIPSDK.eImageBufferType.eIBT_Label16)
-                        temp_img = PyIPSDK.createImage(geometryRgb2_label)
-                        util.eraseImg(temp_img, 0)
                     # ui.displayImg(dico_label_overlay_IPSDK[label], pause=True)
+            dico_label_overlay_IPSDK["leaf"] = self.full_leaves_label_img
             for label, img_overlay in dico_label_overlay_IPSDK.items():
                 # ui.displayImg(img_overlay, pause=True, title=f" {basename}_{label}_overlay_ipsdk.tif   {label}")
                 PyIPSDK.saveTiffImageFile(self.basedir.joinpath(f"{basename}_{label}_overlay_ipsdk.tif").as_posix(),
@@ -955,10 +969,7 @@ class AnalysisImages:
         # extract path/name from image path
         path_img = Path(image_path)
         basename = path_img.stem
-        if self.plant_model == "banana":
-            small_size = 105000
-        elif self.plant_model == "rice":
-            small_size = 100000
+        small_size = 60000
         ##############################################
         # If machine learning for extract
         if self.split_ML:
@@ -971,9 +982,6 @@ class AnalysisImages:
         else:
             # split PCA RGB
             imagePCA, eigenValues, eigenVectors, matrixRank = classif.pcaReductionImg(loaded_image)
-            # if self.plant_model == "banana":
-            #     img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
-            # elif self.plant_model == "rice":
             img1 = util.copyImg(PyIPSDK.extractPlan(0, 0, 1, imagePCA))
             # ui.displayImg(img1, pause=True)
 
@@ -984,35 +992,51 @@ class AnalysisImages:
         # ui.displayImg(all_mask, pause=True)
         # suppression des artefacts pour obtenir le mask des feuilles
         # ui.displayImg(all_mask, pause=True, title="all_maskLeaf")
-        if self.plant_model == "banana":
-            # all_mask_filter = advmorpho.removeBorder2dImg(all_mask)
-            all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask, small_size)
-            structuringElement = PyIPSDK.circularSEXYInfo(3)
-            all_mask_filter = morpho.closing2dImg(all_mask_filter, structuringElement, PyIPSDK.eBEP_Disable)
-            # ui.displayImg(all_mask_filter, pause=True, title="all_mask_filter")
-        else:
-            all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask, small_size)
-        # all_mask_filter_bin = advmorpho.binaryReconstruction2dImg(all_mask, all_mask_filter)
-        # ui.displayImg(all_mask_filter_bin, pause=True, title="all_mask_filter_bin")
-        all_mask_filter_bin = advmorpho.fillHole2dImg(all_mask_filter)
-        # ui.displayImg(all_mask_filter_bin, pause=True, title="all_mask_filter_bin")
+        all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask, 6000)
+        structuringElement = PyIPSDK.circularSEXYInfo(5)
+        all_mask_filter = morpho.closing2dImg(all_mask_filter, structuringElement, PyIPSDK.eBEP_Disable)
+        all_mask_filter = advmorpho.fillHole2dImg(all_mask_filter)
+        # ui.displayImg(all_mask_filter, pause=True, title="all_mask_filter")
+
         # trim the edge of the leaf to remove the plastic cover
         structuringElement = PyIPSDK.circularSEXYInfo(int(self.border_leaf))
-        all_mask_filter_bin = morpho.erode2dImg(all_mask_filter_bin, structuringElement)
+        all_mask_filter_bin = morpho.erode2dImg(all_mask_filter, structuringElement)
         # ui.displayImg(all_mask_filter_bin, pause=True, title="all_mask_filter_bin erode")
 
         # split to separated labels (creation mask)
         # TODO: use adaptativeWatershed
-        all_mask_label = advmorpho.connectedComponent2dImg(all_mask_filter_bin,
-                                                           PyIPSDK.eNeighborhood2dType.eN2T_8Connexity)
+        # all_mask_label = advmorpho.connectedComponent2dImg(all_mask_filter_bin,
+        #                                                    PyIPSDK.eNeighborhood2dType.eN2T_8Connexity)
+        all_mask_label = advmorpho.watershedBinarySeparation2dImg(all_mask_filter_bin, 150,
+                                                           PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+
         # remove small objects (bad leaves)
         # TODO: get median leaf size as small size
-        label_img = advmorpho.removeSmallShape2dImg(all_mask_label, small_size)
+        # df_size = self.get_dataframe_size_object(all_mask_label)
+        # if len(df_size) > 1:
+        #     Q1 = np.percentile(df_size["Number of pixels"], 25)
+        #     Q2 = np.percentile(df_size["Number of pixels"], 50)
+        #     Q3 = np.percentile(df_size["Number of pixels"], 75)
+        #     IQR = Q3 - Q1
+        #     # small_size = df_size['Number of pixels'].mean() - Q3
+        #     print(f"mean:\t{df_size['Number of pixels'].mean()}")
+        #     print(f"median:\t{df_size['Number of pixels'].median()}")
+        #     print(f"std:\t{df_size['Number of pixels'].std()}")
+        #     print(f"Q1:\t{Q1}")
+        #     print(f"Q2:\t{Q2}")
+        #     print(f"Q3:\t{Q3}")
+        #     print(f"IQR:\t{IQR}")
+        #     print(f"Q1-IQR:\t{Q1 - IQR}")
+        #     print(f"mean-Q3:\t{df_size['Number of pixels'].mean() - Q3}")
+        #
+        # print(f"small_size:\t{small_size}")
+        self.full_leaves_label_img = advmorpho.removeSmallShape2dImg(all_mask_label, small_size)
+        # df_size = self.get_dataframe_size_object(label_img)
+        # ui.displayImg(self.full_leaves_label_img, pause=False, title="label_img")
 
         # check if mask is empty after remove small elements
-        nbLabels = glbmsr.statsMsr2d(label_img).max
+        nbLabels = glbmsr.statsMsr2d(self.full_leaves_label_img).max
         if nbLabels > 0:
-
             # cut the leaves according to the mask
             calibration = PyIPSDK.createGeometricCalibration2d(1, 1, 'px')
             inMeasureInfoSet2d = PyIPSDK.createMeasureInfoSet2d(calibration)
@@ -1022,7 +1046,7 @@ class AnalysisImages:
             PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxSizeYMsr")
             PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxCenterXMsr")
             PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "BoundingBoxCenterYMsr")
-            outMeasureSet1 = shapeanalysis.labelAnalysis2d(loaded_image, label_img, inMeasureInfoSet2d)
+            outMeasureSet1 = shapeanalysis.labelAnalysis2d(loaded_image, self.full_leaves_label_img, inMeasureInfoSet2d)
             x_min_array = outMeasureSet1.getMeasure("BoundingBoxMinXMsr").getMeasureResult().getColl(0)[1:]
             y_min_array = outMeasureSet1.getMeasure("BoundingBoxMinYMsr").getMeasureResult().getColl(0)[1:]
             x_size_array = outMeasureSet1.getMeasure("BoundingBoxSizeXMsr").getMeasureResult().getColl(0)[1:]
@@ -1030,23 +1054,29 @@ class AnalysisImages:
             x_barycentre = outMeasureSet1.getMeasure("BoundingBoxCenterXMsr").getMeasureResult().getColl(0)[1:]
             y_barycentre = outMeasureSet1.getMeasure("BoundingBoxCenterYMsr").getMeasureResult().getColl(0)[1:]
 
-            order_list_pos = sorted(
-                [(x_min, y_min, x_size, y_size, x_bary, y_bary) for x_min, y_min, x_size, y_size, x_bary, y_bary in
-                 zip(x_min_array, y_min_array, x_size_array, y_size_array, x_barycentre, y_barycentre)],
-                key=lambda x: self.__bary_sort(x))
-
+            order_list_pos = zip(x_min_array, y_min_array, x_size_array, y_size_array, x_barycentre, y_barycentre)
             table_leaves = []
-            for c, tuple_values in enumerate(order_list_pos, 1):
+            for id, tuple_values in enumerate(order_list_pos, 1):
                 xmin, ymin, xsize, ysize, xbary, ybary = tuple_values
-                # print(xmin, ymin, xsize, ysize)
+                leaf_label = bin.thresholdImg(self.full_leaves_label_img, id, id)
+
+                tmp = util.copyImg(loaded_image)
+                imWhite = PyIPSDK.createImage(tmp)
+                if imWhite.getBufferType() == PyIPSDK.eIBT_UInt8:
+                    util.eraseImg(imWhite, 255.0)
+                elif imWhite.getBufferType() == PyIPSDK.eIBT_UInt16:
+                    util.eraseImg(imWhite, 65025.0)
+                original_mask_leaf = logic.maskImgImg(loaded_image, imWhite , leaf_label)
+                # ui.displayImg(original_mask_leaf, pause=True, title=f"leaf_id {id}")
                 table_leaves.append(Leaf(basename=basename,
                                          basedir=self.basedir,
-                                         leaf_id=c,
+                                         leaf_id=id,
                                          x_pos=xmin,
                                          y_pos=ymin,
                                          x_size=xsize,
                                          y_size=ysize,
-                                         full_leaves_ipsdk_img=loaded_image
+                                         full_leaves_ipsdk_img=loaded_image,
+                                         original_mask_leaf=original_mask_leaf
                                          )
                                     )
             return table_leaves
@@ -1127,7 +1157,7 @@ class Calibration:
 
 
 class Leaf:
-    def __init__(self, basename, basedir, leaf_id, x_pos, y_pos, x_size, y_size, full_leaves_ipsdk_img):
+    def __init__(self, basename, basedir, leaf_id, x_pos, y_pos, x_size, y_size, full_leaves_ipsdk_img, original_mask_leaf):
         self.logger = logging.getLogger('Leaf')
         self.basename = basename
         self.basedir = basedir
@@ -1138,6 +1168,7 @@ class Leaf:
         self.y_size = int(y_size)
 
         self.full_leaves_ipsdk_img = full_leaves_ipsdk_img
+        self.original_mask_leaf = original_mask_leaf
 
         self.image_ipsdk_blend_dict_class = {}
 
@@ -1204,8 +1235,13 @@ class Leaf:
                  calibration_obj, save_cut=False,
                  model_name_classification=None):
         self.model_name_classification = model_name_classification
-        ipsdk_img = util.getROI2dImg(self.full_leaves_ipsdk_img, self.x_position, self.y_position, self.x_size,
+
+        # ui.displayImg(self.full_leaves_ipsdk_img, pause=True, title="self.full_leaves_ipsdk_img")
+        # ui.displayImg(self.original_mask_leaf, pause=True, title="self.original_mask_leaf")
+
+        ipsdk_img = util.getROI2dImg(self.original_mask_leaf, self.x_position, self.y_position, self.x_size,
                                      self.y_size)
+        # ui.displayImg(ipsdk_img, pause=True, title="ipsdk_img")
         if save_cut:
             Path(self.basedir.joinpath("leaf_cut_only")).mkdir(exist_ok=True)
             outimgname = self.basedir.joinpath("leaf_cut_only", f"{self.basename}_{self.leaf_id}.tif")
@@ -1214,6 +1250,7 @@ class Leaf:
 
         # apply smart segmentation machine learning
         all_masks, imageProbabilities = ml.pixelClassificationRFWithProbabilitiesImg(ipsdk_img, model_load)
+        # ui.displayImg(all_masks, pause=True, title="all_masks")
 
         def save_proba(imageProbabilities):
             outImage = util.copyImg(imageProbabilities)
