@@ -1,6 +1,6 @@
 log_path:
 debug: false
-PLANT_MODEL: banana
+PLANT_MODEL: leaf
 csv_file:
 rename:
 RUNSTEP:

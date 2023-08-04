@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 import pandas as pd
 from collections import OrderedDict
-from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot, QObject, pyqtSignal
+from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot, QObject, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QPixmap, QColor
 from PyQt5.Qsci import QsciScintilla, QsciLexerYAML
 import PyQt5.QtWidgets as qt
@@ -142,7 +142,7 @@ class ToolsActivation(qt.QGroupBox):
         self.plant_model_label.setWhatsThis(self.parent.parent.dico_doc["PLANT_MODEL"])
         self.plant_model_label.setStatusTip(self.parent.parent.dico_doc_str["PLANT_MODEL"])
         self.plant_model = qt.QComboBox()
-        self.plant_model.addItems(["banana", "rice"])
+        self.plant_model.addItems(["leaf", "banana"])
         self.plant_model.setFixedSize(int(100 * vrb.ratio), int(25 * vrb.ratio))
         self.plant_model.setWhatsThis(self.parent.parent.dico_doc["PLANT_MODEL"])
         self.plant_model.setStatusTip(self.parent.parent.dico_doc_str["PLANT_MODEL"])
@@ -154,29 +154,43 @@ class ToolsActivation(qt.QGroupBox):
         self.show_meta_checkbox.setWhatsThis(self.parent.parent.dico_doc["show_meta"])
         self.show_meta_checkbox.setStatusTip(self.parent.parent.dico_doc_str["show_meta"])
 
-        self.draw_checkbox = qt.QCheckBox()
-        self.draw_checkbox.setText("Draw")
-        self.draw_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
-        self.draw_checkbox.setWhatsThis(self.parent.parent.dico_doc["draw"])
-        self.draw_checkbox.setStatusTip(self.parent.parent.dico_doc_str["draw"])
+        icon_size = 35
+        self.draw_label = qt.QLabel()
+        self.draw_label.setText("Draw")
+        self.draw_label.setFixedSize(int(55 * vrb.ratio), int(icon_size * vrb.ratio))
+        self.draw = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/draw.png")
+        self.draw.setCheckable(True)
+        self.draw.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.draw.setWhatsThis(self.parent.parent.dico_doc["draw"])
+        self.draw.setStatusTip(self.parent.parent.dico_doc_str["draw"])
 
-        self.cut_checkbox = qt.QCheckBox()
-        self.cut_checkbox.setText("Cut")
-        self.cut_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
-        self.cut_checkbox.setWhatsThis(self.parent.parent.dico_doc["cut"])
-        self.cut_checkbox.setStatusTip(self.parent.parent.dico_doc_str["cut"])
+        self.cut_label = qt.QLabel()
+        self.cut_label.setText("Cut")
+        self.cut_label.setFixedSize(int(55 * vrb.ratio), int(icon_size * vrb.ratio))
+        self.cut = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/cut.png")
+        self.cut.setCheckable(True)
+        self.cut.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.cut.setWhatsThis(self.parent.parent.dico_doc["cut"])
+        self.cut.setStatusTip(self.parent.parent.dico_doc_str["cut"])
 
-        self.ml_checkbox = qt.QCheckBox()
-        self.ml_checkbox.setText("ML")
-        self.ml_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
-        self.ml_checkbox.setWhatsThis(self.parent.parent.dico_doc["ml"])
-        self.ml_checkbox.setStatusTip(self.parent.parent.dico_doc_str["ml"])
+        self.ml_label = qt.QLabel()
+        self.ml_label.setText("ML")
+        self.ml_label.setFixedSize(int(55 * vrb.ratio), int(icon_size * vrb.ratio))
+        self.ml = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/ml.png")
+        self.ml.setCheckable(True)
+        self.ml.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.ml.setWhatsThis(self.parent.parent.dico_doc["ml"])
+        self.ml.setStatusTip(self.parent.parent.dico_doc_str["ml"])
 
-        self.merge_checkbox = qt.QCheckBox()
-        self.merge_checkbox.setText("Merge")
-        self.merge_checkbox.setFixedSize(int(60 * vrb.ratio), int(30 * vrb.ratio))
-        self.merge_checkbox.setWhatsThis(self.parent.parent.dico_doc["merge"])
-        self.merge_checkbox.setStatusTip(self.parent.parent.dico_doc_str["merge"])
+
+        self.merge_label = qt.QLabel()
+        self.merge_label.setText("Merge")
+        self.merge_label.setFixedSize(int(60 * vrb.ratio), int(icon_size * vrb.ratio))
+        self.merge = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/merge.png")
+        self.merge.setCheckable(True)
+        self.merge.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.merge.setWhatsThis(self.parent.parent.dico_doc["merge"])
+        self.merge.setStatusTip(self.parent.parent.dico_doc_str["merge"])
 
         self.csv_file = FileSelectorLeaftool(label="CSV file:", file=True)
         self.csv_file.setWhatsThis(self.parent.parent.dico_doc["csv_file"])
@@ -192,23 +206,23 @@ class ToolsActivation(qt.QGroupBox):
         self.layout.addWidget(self.plant_model_label, 0, 0, Qt.AlignLeft)
         self.layout.addWidget(self.plant_model, 0, 1, Qt.AlignLeft)
         self.layout.addWidget(self.show_meta_checkbox, 0, 2, Qt.AlignLeft)
-        self.layout.addWidget(self.parent.parent.whatsThisButton, 0, 4, Qt.AlignBottom)
 
         # Layout Style
         tools_group = qt.QGroupBox()
         tools_group.setTitle("Tools activation")
         tools_group.setStyleSheet(style)
-        tools_group.layout = qt.QHBoxLayout()
+        tools_group.layout = qt.QGridLayout()
         tools_group.layout.setContentsMargins(5, 10, 0, 0)
         tools_group.setLayout(tools_group.layout)
-        tools_group.layout.addStretch()
-        tools_group.layout.addWidget(self.draw_checkbox)
-        tools_group.layout.addWidget(self.cut_checkbox)
-        tools_group.layout.addWidget(self.ml_checkbox)
-        tools_group.layout.addWidget(self.merge_checkbox)
-        tools_group.layout.addStretch()
-        # tools_group.setAutoFillBackground(True)
-        # tools_group.setFixedWidth(int(500 * vrb.ratio))
+        tools_group.layout.addWidget(self.draw, 0, 0, Qt.AlignRight)
+        tools_group.layout.addWidget(self.draw_label, 0, 1, Qt.AlignLeft)
+        tools_group.layout.addWidget(self.cut, 0, 2, Qt.AlignRight)
+        tools_group.layout.addWidget(self.cut_label, 0, 3, Qt.AlignLeft)
+        tools_group.layout.addWidget(self.ml, 0, 4, Qt.AlignRight)
+        tools_group.layout.addWidget(self.ml_label, 0, 5, Qt.AlignLeft)
+        tools_group.layout.addWidget(self.merge, 0, 6, Qt.AlignRight)
+        tools_group.layout.addWidget(self.merge_label, 0, 7, Qt.AlignLeft)
+        tools_group.setFixedWidth(int(600 * vrb.ratio))
         self.layout.addWidget(tools_group, 0, 3, Qt.AlignTop)
 
         # Meta group
@@ -226,10 +240,10 @@ class ToolsActivation(qt.QGroupBox):
         # self.layout.addWidget(self.meta_group, 1, 0, 1, 4)
 
         # connections
-        self.draw_checkbox.stateChanged.connect(self.update_activation_tools)
-        self.cut_checkbox.stateChanged.connect(self.update_activation_tools)
-        self.ml_checkbox.stateChanged.connect(self.update_activation_tools)
-        self.merge_checkbox.stateChanged.connect(self.update_activation_tools)
+        self.draw.clicked.connect(self.update_activation_tools)
+        self.cut.clicked.connect(self.update_activation_tools)
+        self.ml.clicked.connect(self.update_activation_tools)
+        self.merge.clicked.connect(self.update_activation_tools)
         self.plant_model.currentIndexChanged.connect(self.update_activation_tools)
         self.csv_file.lineEditFile.textChanged.connect(partial(self.parent.check_path, from_object=self.csv_file.lineEditFile, keys_list="'csv_file'"))
         # self.list_selection.mInput.itemSelectionChanged.connect(self.update_activation_tools)
@@ -250,9 +264,9 @@ class ToolsActivation(qt.QGroupBox):
     def upload_activation_tools(self):
         try:
             self.loading = True
-            if self.parent.dict_for_yaml["PLANT_MODEL"] not in ["banana", "rice"]:
+            if self.parent.dict_for_yaml["PLANT_MODEL"] not in ["banana", "leaf"]:
                 self.parent.logger.error(
-                    f"Error: arguments PLANT_MODEL:'{self.parent.dict_for_yaml['PLANT_MODEL']}' is not allow, please use only 'banana' or 'rice', please reload valid file")
+                    f"Error: arguments PLANT_MODEL:'{self.parent.dict_for_yaml['PLANT_MODEL']}' is not allow, please use only 'leaf' or 'banana', please reload valid file")
             else:
                 self.plant_model.setCurrentText(self.parent.dict_for_yaml["PLANT_MODEL"])
 
@@ -264,10 +278,10 @@ class ToolsActivation(qt.QGroupBox):
                                    default_error=False)
             if message:
                 self.parent.logger.error(message)
-            self.draw_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["draw"]))
-            self.cut_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["cut"]))
-            self.ml_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["ML"]))
-            self.merge_checkbox.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["merge"]))
+            self.draw.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["draw"]))
+            self.cut.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["cut"]))
+            self.ml.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["ML"]))
+            self.merge.setChecked(bool(self.parent.dict_for_yaml["RUNSTEP"]["merge"]))
 
             self.csv_file.lineEditFile.setText(self.parent.dict_for_yaml["csv_file"])
             self.list_selection.clean_list()
@@ -279,11 +293,11 @@ class ToolsActivation(qt.QGroupBox):
 
     def update_activation_tools(self):
         if not self.loading:
-            self.parent.dict_for_yaml["RUNSTEP"]["cut"] = self.cut_checkbox.isChecked()
-            self.parent.dict_for_yaml["RUNSTEP"]["draw"] = self.draw_checkbox.isChecked()
+            self.parent.dict_for_yaml["RUNSTEP"]["cut"] = self.cut.isChecked()
+            self.parent.dict_for_yaml["RUNSTEP"]["draw"] = self.draw.isChecked()
             self.parent.layer_draw_cut.show_draw_params()
-            self.parent.dict_for_yaml["RUNSTEP"]["ML"] = self.ml_checkbox.isChecked()
-            self.parent.dict_for_yaml["RUNSTEP"]["merge"] = self.merge_checkbox.isChecked()
+            self.parent.dict_for_yaml["RUNSTEP"]["ML"] = self.ml.isChecked()
+            self.parent.dict_for_yaml["RUNSTEP"]["merge"] = self.merge.isChecked()
             self.parent.layer_ml_merge.show_ml_merge_params()
             self.parent.dict_for_yaml["PLANT_MODEL"] = self.plant_model.currentText()
             self.parent.dict_for_yaml["csv_file"] = self.csv_file.lineEditFile.text()
@@ -294,18 +308,18 @@ class ToolsActivation(qt.QGroupBox):
     def disable_running_bottom(self):
         # if all disable, disable run
 
-        if (not self.parent.layer_tools.draw_checkbox.isChecked() \
-                and not self.parent.layer_tools.cut_checkbox.isChecked() \
-                and not self.parent.layer_tools.ml_checkbox.isChecked() \
-                and not self.parent.layer_tools.merge_checkbox.isChecked()) or self.parent.warning_found:
+        if (not self.parent.layer_tools.draw.isChecked() \
+                and not self.parent.layer_tools.cut.isChecked() \
+                and not self.parent.layer_tools.ml.isChecked() \
+                and not self.parent.layer_tools.merge.isChecked()) or self.parent.warning_found:
             self.parent.layer_leaftool_params.run.setDisabled(True)
             self.parent.layer_leaftool_params.save.setDisabled(True)
         else:
             self.parent.layer_leaftool_params.run.setDisabled(False)
             self.parent.layer_leaftool_params.save.setDisabled(False)
-                # self.csv_file.setVisible(self.parent.layer_tools.draw_checkbox.isChecked())
-                # self.csv_file.setVisible(self.parent.layer_tools.cut_checkbox.isChecked())
-                # self.csv_file.setVisible(self.parent.layer_tools.ml_checkbox.isChecked())
+                # self.csv_file.setVisible(self.parent.layer_tools.draw.isChecked())
+                # self.csv_file.setVisible(self.parent.layer_tools.cut.isChecked())
+                # self.csv_file.setVisible(self.parent.layer_tools.ml.isChecked())
 
     def update_header_csv(self):
         if self.parent.dict_for_yaml["csv_file"] and Path(self.parent.dict_for_yaml["csv_file"]).exists():
@@ -347,10 +361,10 @@ class LeaftoolParams(qt.QGroupBox):
         self.loading = False
 
         # Widgets
-        icon_size = 30
+        icon_size = 35
         self.save_label = qt.QLabel()
         self.save_label.setText("Save YAML:")
-        self.save = wgt.PushButtonImage(vrb.folderImages + "/Save_As.png")
+        self.save = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/Save_As.png")
         self.save.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
         self.save.setWhatsThis(self.parent.parent.dico_doc["save"])
         self.save.setStatusTip(self.parent.parent.dico_doc_str["save"])
@@ -384,6 +398,14 @@ class LeaftoolParams(qt.QGroupBox):
         self.debug_checkbox.setWhatsThis(self.parent.parent.dico_doc["debug"])
         self.debug_checkbox.setStatusTip(self.parent.parent.dico_doc_str["debug"])
 
+        self.clean_label = qt.QLabel()
+        self.clean_label.setText("Reset:")
+        self.clean = wgt.PushButtonImage(vrb.folderMacroInterface + "/LeAFtool/Images/clean.png")
+        self.clean.setCheckable(True)
+        self.clean.setFixedSize(int(icon_size * vrb.ratio), int(icon_size * vrb.ratio))
+        self.clean.setWhatsThis(self.parent.parent.dico_doc["clean"])
+        self.clean.setStatusTip(self.parent.parent.dico_doc_str["clean"])
+
         # Position Widgets
         self.layout.addWidget(self.upload_label, 0, 0, Qt.AlignRight)
         self.layout.addWidget(self.upload, 0, 1, Qt.AlignLeft)
@@ -394,8 +416,13 @@ class LeaftoolParams(qt.QGroupBox):
         self.layout.addWidget(self.run_label, 0, 4, Qt.AlignRight)
         self.layout.addWidget(self.run, 0, 5, Qt.AlignLeft)
 
-        self.layout.addWidget(self.preview_yaml_checkbox, 0, 6, Qt.AlignCenter)
-        self.layout.addWidget(self.debug_checkbox, 0, 7, Qt.AlignCenter)
+        self.layout.addWidget(self.clean_label, 0, 6, Qt.AlignRight)
+        self.layout.addWidget(self.clean, 0, 7, Qt.AlignLeft)
+
+        self.layout.addWidget(self.preview_yaml_checkbox, 0, 8, Qt.AlignCenter)
+        self.layout.addWidget(self.debug_checkbox, 0, 9, Qt.AlignCenter)
+
+        self.layout.addWidget(self.parent.parent.whatsThisButton, 0, 10, Qt.AlignCenter)
 
         # Init state
         self.hide_preview_yaml()
@@ -478,12 +505,12 @@ class RunLeAFtool(qt.QWidget):
         not_resize.setRetainSizeWhenHidden(True)
         self.layer_draw_cut.setSizePolicy(not_resize)
 
-        self.layout.addWidget(self.layer_tools, 0, 0, 1, 2)
-        self.layout.addWidget(self.layer_tools.meta_group, 1, 0, 1, 2)
+        self.layout.addWidget(self.layer_leaftool_params, 0, 0, 1, 2)
+        self.layout.addWidget(self.layer_tools, 1, 0, 1, 2)
+        self.layout.addWidget(self.layer_tools.meta_group, 2, 0, 1, 2)
         self.layout.addWidget(self.preview_config, 0, 3, 5, 1)
-        self.layout.addWidget(self.layer_draw_cut, 2, 0)
-        self.layout.addWidget(self.layer_ml_merge, 2, 1)
-        self.layout.addWidget(self.layer_leaftool_params, 3, 0, 1, 2)
+        self.layout.addWidget(self.layer_draw_cut, 3, 0)
+        self.layout.addWidget(self.layer_ml_merge, 3, 1)
         self.layout.addWidget(self.process.widget, 4, 0, 1, 2)
         not_resize = self.sizePolicy()
         not_resize.setRetainSizeWhenHidden(True)
@@ -495,7 +522,14 @@ class RunLeAFtool(qt.QWidget):
         self.layer_leaftool_params.upload.clicked.connect(self.upload_yaml)
         self.layer_leaftool_params.save.clicked.connect(self.save_yaml)
         self.layer_leaftool_params.run.clicked.connect(self.change_run_state)
+        self.layer_leaftool_params.clean.clicked.connect(self.reset_error)
         qt.QApplication.instance().focusChanged.connect(self.on_focus_changed)
+
+    def reset_error(self):
+        """reset error on load params"""
+        self.process.clear()
+        self.get_warning()
+        self.update_all()
 
     def change_run_state(self):
         if self.layer_leaftool_params.run.isChecked():

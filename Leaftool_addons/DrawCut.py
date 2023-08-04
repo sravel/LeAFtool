@@ -3,6 +3,7 @@ import PyQt5.QtWidgets as qt
 import UsefullVariables as vrb
 from PyQt5.QtCore import Qt, QCoreApplication
 from PyQt5 import QtGui
+from PyQt5.QtGui import QPixmap
 
 from Leaftool_addons.commonWidget import NumberLineEditLabel, FileSelectorLeaftool, SpinBoxLabel, style, get_files_ext, allow_ext, int_validator, check_values
 
@@ -255,14 +256,35 @@ class DrawCutParams(qt.QGroupBox):
             self.parent.dict_for_yaml = self.parent.dict_backup
 
     def show_draw_params(self):
-        if self.parent.layer_tools.draw_checkbox.isChecked() or self.parent.layer_tools.cut_checkbox.isChecked():
+        if self.parent.layer_tools.draw.isChecked() or self.parent.layer_tools.cut.isChecked():
             self.setVisible(True)
-            self.out_draw_dir.setVisible(self.parent.layer_tools.draw_checkbox.isChecked())
-            self.out_cut_dir.setVisible(self.parent.layer_tools.cut_checkbox.isChecked())
-            self.noise_remove.setVisible(self.parent.layer_tools.cut_checkbox.isChecked())
-            self.numbering.setVisible(self.parent.layer_tools.cut_checkbox.isChecked())
+            self.out_draw_dir.setVisible(self.parent.layer_tools.draw.isChecked())
+            self.out_cut_dir.setVisible(self.parent.layer_tools.cut.isChecked())
+            self.noise_remove.setVisible(self.parent.layer_tools.cut.isChecked())
+            self.numbering.setVisible(self.parent.layer_tools.cut.isChecked())
         else:
             self.setVisible(False)
+        if not self.parent.layer_tools.draw.isChecked():
+            self.parent.layer_tools.draw_label.setText("Not drawn")
+            self.parent.layer_tools.draw.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/undrawn.png")
+            self.parent.layer_tools.draw.resizeEvent(None)
+            self.parent.layer_tools.draw.setChecked(False)
+        else:
+            self.parent.layer_tools.draw_label.setText("Draw")
+            self.parent.layer_tools.draw.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/draw.png")
+            self.parent.layer_tools.draw.resizeEvent(None)
+            self.parent.layer_tools.draw.setChecked(True)
+
+        if not self.parent.layer_tools.cut.isChecked():
+            self.parent.layer_tools.cut_label.setText("Not cut")
+            self.parent.layer_tools.cut.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/uncut.png")
+            self.parent.layer_tools.cut.resizeEvent(None)
+            self.parent.layer_tools.cut.setChecked(False)
+        else:
+            self.parent.layer_tools.cut_label.setText("Cut")
+            self.parent.layer_tools.cut.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/cut.png")
+            self.parent.layer_tools.cut.resizeEvent(None)
+            self.parent.layer_tools.cut.setChecked(True)
 
     def update_ext(self):
         files, ext_list = get_files_ext(self.images_path.lineEditFile.text(), allow_ext)

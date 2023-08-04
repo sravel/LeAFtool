@@ -378,7 +378,7 @@ class DrawAndCutImages:
             default value 3)
             numbering (:obj:`str`): if right (default), the output order cut is left to right, if bottom,
             the output order is top to bottom then left
-            plant_model (:obj:`str`): The plant model name (rice or banana)
+            plant_model (:obj:`str`): The plant model name (leaf or banana)
             force_rerun (:obj:`boolean`): even files existed, rerun draw and/or cut
         """
         self.logger = logging.getLogger('DrawAndCutImages')
@@ -572,7 +572,7 @@ class AnalysisImages:
             force_rerun (:obj:`boolean`): If True, rerun all images, else only not run Default: True
             draw_ML_image (:obj:`boolean`): If True, add rectangle overlay corresponding to image use for apply ML
             Default: False
-            plant_model (:obj:`boolean`): The plant model (rice or banana)
+            plant_model (:obj:`boolean`): The plant model (leaf or banana)
             color_lesion_individual (:obj:`boolean`): If true make random color for separated lesion else use model color for all Default: True
         """
         self.logger = logging.getLogger('AnalysisImages')
@@ -973,7 +973,12 @@ class AnalysisImages:
         ##############################################
         # If machine learning for extract
         if self.split_ML:
-            all_mask_label = ml.pixelClassificationRFImg(loaded_image, self.model_load)
+            # all_mask_label = ml.pixelClassificationRFImg(loaded_image, self.model_load)
+
+            model_path = Path(vrb.folderPixelClassification).joinpath(f"split/ModelIPSDK.bin").as_posix()
+            model_load = PyIPSDK.readRandomForestModel(model_path)
+            all_mask_label = ml.pixelClassificationRFImg(loaded_image, model_load)
+            ui.displayImg(all_mask_label, pause=True)
             leaf_indice = self.model_to_label_dict["leaf"]["value"]
             nbLabels = glbmsr.statsMsr2d(all_mask_label).max
             all_mask = bin.thresholdImg(all_mask_label, leaf_indice, nbLabels)
@@ -995,7 +1000,8 @@ class AnalysisImages:
         all_mask_filter = advmorpho.removeSmallShape2dImg(all_mask, 6000)
         structuringElement = PyIPSDK.circularSEXYInfo(5)
         all_mask_filter = morpho.closing2dImg(all_mask_filter, structuringElement, PyIPSDK.eBEP_Disable)
-        all_mask_filter = advmorpho.fillHole2dImg(all_mask_filter)
+        # all_mask_filter = advmorpho.fillHole2dImg(all_mask_filter)
+
         # ui.displayImg(all_mask_filter, pause=True, title="all_mask_filter")
 
         # trim the edge of the leaf to remove the plastic cover
@@ -1009,6 +1015,7 @@ class AnalysisImages:
         #                                                    PyIPSDK.eNeighborhood2dType.eN2T_8Connexity)
         all_mask_label = advmorpho.watershedBinarySeparation2dImg(all_mask_filter_bin, 150,
                                                            PyIPSDK.eWatershedSeparationMode.eWSM_SplitLabel)
+        # all_mask_label = advmorpho.fillHole2dImg(all_mask_label)
 
         # remove small objects (bad leaves)
         # TODO: get median leaf size as small size
@@ -1189,31 +1196,31 @@ class Leaf:
             PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "NbPixels2dMsr")
             PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Perimeter2dMsr",
                                       shapeanalysis.createHolesBasicPolicyMsrParams(False))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterLengthMsr",
-                                      shapeanalysis.createSkeleton2dDiameterLengthMsrParams(
-                                          PyIPSDK.eSHP_Ignored))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterMeanCurvatureMsr",
-                                      shapeanalysis.createSkeleton2dDiameterMeanCurvatureMsrParams(
-                                          PyIPSDK.eSHP_Ignored))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterTortuosityMsr",
-                                      shapeanalysis.createSkeleton2dDiameterTortuosityMsrParams(
-                                          PyIPSDK.eSHP_Ignored))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dLengthMsr",
-                                      shapeanalysis.createSkeleton2dLengthMsrParams(PyIPSDK.eSHP_Ignored,
-                                                                                    PyIPSDK.eSEC_Leaf))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMaxThicknessMsr",
-                                      shapeanalysis.createSkeleton2dMaxThicknessMsrParams(PyIPSDK.eSHP_Ignored))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanEdgeLengthMsr",
-                                      shapeanalysis.createSkeleton2dMeanEdgeLengthMsrParams(
-                                          PyIPSDK.eSHP_Ignored, PyIPSDK.eSEC_Leaf))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanThicknessMsr",
-                                      shapeanalysis.createSkeleton2dMeanThicknessMsrParams(
-                                          PyIPSDK.eSHP_Ignored))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMinThicknessMsr",
-                                      shapeanalysis.createSkeleton2dMinThicknessMsrParams(PyIPSDK.eSHP_Ignored))
-            PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dNbVertexMsr",
-                                      shapeanalysis.createSkeleton2dNbVertexMsrParams(PyIPSDK.eSHP_Ignored,
-                                                                                      PyIPSDK.eSVC_Internal))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterLengthMsr",
+            #                           shapeanalysis.createSkeleton2dDiameterLengthMsrParams(
+            #                               PyIPSDK.eSHP_Ignored))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterMeanCurvatureMsr",
+            #                           shapeanalysis.createSkeleton2dDiameterMeanCurvatureMsrParams(
+            #                               PyIPSDK.eSHP_Ignored))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dDiameterTortuosityMsr",
+            #                           shapeanalysis.createSkeleton2dDiameterTortuosityMsrParams(
+            #                               PyIPSDK.eSHP_Ignored))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dLengthMsr",
+            #                           shapeanalysis.createSkeleton2dLengthMsrParams(PyIPSDK.eSHP_Ignored,
+            #                                                                         PyIPSDK.eSEC_Leaf))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMaxThicknessMsr",
+            #                           shapeanalysis.createSkeleton2dMaxThicknessMsrParams(PyIPSDK.eSHP_Ignored))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanEdgeLengthMsr",
+            #                           shapeanalysis.createSkeleton2dMeanEdgeLengthMsrParams(
+            #                               PyIPSDK.eSHP_Ignored, PyIPSDK.eSEC_Leaf))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMeanThicknessMsr",
+            #                           shapeanalysis.createSkeleton2dMeanThicknessMsrParams(
+            #                               PyIPSDK.eSHP_Ignored))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dMinThicknessMsr",
+            #                           shapeanalysis.createSkeleton2dMinThicknessMsrParams(PyIPSDK.eSHP_Ignored))
+            # PyIPSDK.createMeasureInfo(inMeasureInfoSet2d, "Skeleton2dNbVertexMsr",
+            #                           shapeanalysis.createSkeleton2dNbVertexMsrParams(PyIPSDK.eSHP_Ignored,
+            #                                                                           PyIPSDK.eSVC_Internal))
 
             # call to separated object of the class
             outMeasureSet1 = shapeanalysis.labelAnalysis2d(split_mask_separated_filter,
@@ -1250,7 +1257,8 @@ class Leaf:
 
         # apply smart segmentation machine learning
         all_masks, imageProbabilities = ml.pixelClassificationRFWithProbabilitiesImg(ipsdk_img, model_load)
-        # ui.displayImg(all_masks, pause=True, title="all_masks")
+        # ui.displayImg(all_masks, pause=False, title="all_masks")
+        # ui.displayImg(imageProbabilities, pause=True, title="imageProbabilities")
 
         def save_proba(imageProbabilities):
             outImage = util.copyImg(imageProbabilities)
@@ -1293,8 +1301,7 @@ class Leaf:
                         split_mask_separated_filter = advmorpho.keepBigShape2dImg(split_mask_separated, 1)
                     else:
                         split_mask_separated_filter = split_mask_separated
-                    # ui.displayImg(split_mask_separated_filter, pause=True, title="split_mask_separated_filter on
-                    # LOOP")
+                    # ui.displayImg(split_mask_separated_filter, pause=True, title="split_mask_separated_filter on LOOP")
                     self.image_ipsdk_blend_dict_class[label] = split_mask_separated_filter
                     self.label_image_to_df(split_mask_separated_filter, calibration_obj, label)
                 else:
@@ -1352,7 +1359,7 @@ class LeAFtool:
         self.cut_obj = None
         self.analysis = None
         self.plant_model = None
-        self.__allow_plant_model = ["banana", "rice"]
+        self.__allow_plant_model = ["leaf", "banana"]
 
         with open(config_file, "r") as file_config:
             self.config = yaml.load(file_config, Loader=yaml.Loader)

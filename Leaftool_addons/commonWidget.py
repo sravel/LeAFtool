@@ -32,6 +32,17 @@ border-color: #81b872;
 QSpinBox {
     background-color: QLinearGradient( x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4d4d4d, stop: 0 #646464, stop: 1 #5d5d5d);
 }
+QPushButton
+{
+    color: #ffffff;
+    background-color:#323232;
+    border-width: 1px;
+    border-color: #1e1e1e;
+    border-style: solid;
+    padding: 3px;
+    padding-left: 5px;
+    padding-right: 5px;
+}
 """
 allow_ext = ["tif", "tiff", "TIF", "TIFF", "Tif", "Tiff", "im6", "IM6", "jpg", "JPG", "PNG", "png", "BMP", "bmp"]
 

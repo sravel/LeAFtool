@@ -16,7 +16,7 @@ Global
 
 - **log_path** *(str)*: Directory path where log files will be created
 - **debug** *(boolean)*: More verbose logging for errors debug
-- **PLANT_MODEL** *(banana/rice)*: Select plante model
+- **PLANT_MODEL** *(leaf/banana)*: Select study object model
 - **csv_file** *(str)*: CSV path file with Meta-info, scan name and position mandatory at first and second position. Separator is autodetect
 - **rename** *(list)*: ordered list of csv header used to rename cut files
 
@@ -83,3 +83,4 @@ Example with:
 - **run** *(file)*: Run processing with the configuration (force to save before)
 - **preview** *(file)*: Show/hide the yaml file build with program.
 - **preview_edit** *(file)*: The yaml file build with program.
+- **clean** *(boolean)*: reset error to modify value

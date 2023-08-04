@@ -3,6 +3,7 @@ from functools import partial
 from pathlib import Path
 import PyQt5.QtWidgets as qt
 from PyQt5.QtCore import Qt, QCoreApplication
+from PyQt5.QtGui import QPixmap
 
 from Leaftool_addons.commonWidget import style, FileSelectorLeaftool, NumberLineEditLabel, SpinBoxLabel, allow_ext, int_validator, check_values
 import UsefullVariables as vrb
@@ -107,7 +108,7 @@ class MergeParams(qt.QGroupBox):
         self.images_ext.addItems(allow_ext)
         self.rm_original = qt.QCheckBox()
         self.rm_original.setText("Remove original")
-        self.rm_original.setFixedSize(int(120 * vrb.ratio), int(30 * vrb.ratio))
+        self.rm_original.setFixedSize(int(120 * vrb.ratio), int(25 * vrb.ratio))
 
         # Position widgets
         self.layout.addWidget(self.label_images_ext, 0, 0, Qt.AlignLeft)
@@ -413,13 +414,33 @@ class MachineLearningParams(qt.QGroupBox):
             self.loading = False
 
     def show_ml_merge_params(self):
-        if self.parent.layer_tools.ml_checkbox.isChecked() or self.parent.layer_tools.merge_checkbox.isChecked():
+        if self.parent.layer_tools.ml.isChecked() or self.parent.layer_tools.merge.isChecked():
             self.setVisible(True)
-            self.ml_params.setVisible(self.parent.layer_tools.ml_checkbox.isChecked())
-            self.merge_params.setVisible(self.parent.layer_tools.merge_checkbox.isChecked())
+            self.ml_params.setVisible(self.parent.layer_tools.ml.isChecked())
+            self.merge_params.setVisible(self.parent.layer_tools.merge.isChecked())
         else:
             self.setVisible(False)
+        if not self.parent.layer_tools.ml.isChecked():
+            self.parent.layer_tools.ml_label.setText("Not ML")
+            self.parent.layer_tools.ml.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/unml.png")
+            self.parent.layer_tools.ml.resizeEvent(None)
+            self.parent.layer_tools.ml.setChecked(False)
+        else:
+            self.parent.layer_tools.ml_label.setText("ML")
+            self.parent.layer_tools.ml.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/ml.png")
+            self.parent.layer_tools.ml.resizeEvent(None)
+            self.parent.layer_tools.ml.setChecked(True)
 
+        if not self.parent.layer_tools.merge.isChecked():
+            self.parent.layer_tools.merge_label.setText("Not merge")
+            self.parent.layer_tools.merge.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/unmerge.png")
+            self.parent.layer_tools.merge.resizeEvent(None)
+            self.parent.layer_tools.merge.setChecked(False)
+        else:
+            self.parent.layer_tools.merge_label.setText("Merge")
+            self.parent.layer_tools.merge.pixmap = QPixmap(vrb.folderMacroInterface + "/LeAFtool/Images/merge.png")
+            self.parent.layer_tools.merge.resizeEvent(None)
+            self.parent.layer_tools.merge.setChecked(True)
 
 ###############################################################################################
 # MAIN
